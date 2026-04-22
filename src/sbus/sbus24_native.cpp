@@ -1,4 +1,5 @@
 #include "sbus24_native.h"
+#include "elapsedMillis.h"
 
 Sbus24Native::Sbus24Native(HardwareSerial* serial)
     : _serial(serial), _bufIdx(0), _parserState(0), _prevByte(SBUS_FOOTER),
@@ -12,7 +13,11 @@ void Sbus24Native::begin() {
     _parserState = 0;
     _prevByte = SBUS_FOOTER;
     // SBUS: 100000 baud, 8E2, inverted signal
+#if defined(ARDUINO_ARCH_ESP32)
+    _serial->begin(SBUS_BAUD, SERIAL_8E2, SBUS_RX_PIN, SBUS_TX_PIN, true);
+#else
     _serial->begin(SBUS_BAUD, SERIAL_8E2_RXINV);
+#endif
 }
 
 // Bolderflight-style state machine parser.

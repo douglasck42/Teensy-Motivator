@@ -1,4 +1,5 @@
 #include "sbus16_native.h"
+#include "elapsedMillis.h"
 
 Sbus16Native::Sbus16Native(HardwareSerial* serial)
     : _serial(serial), _bufIdx(0),
@@ -9,8 +10,12 @@ Sbus16Native::Sbus16Native(HardwareSerial* serial)
 
 void Sbus16Native::begin() {
     // SBUS: 100000 baud, 8E2, inverted
-    // Teensy hardware serial supports SERIAL_8E2 and inversion natively
+#if defined(ARDUINO_ARCH_ESP32)
+    _serial->begin(SBUS_BAUD, SERIAL_8E2, SBUS_RX_PIN, SBUS_TX_PIN, true);
+#else
+    // Teensy hardware serial supports SERIAL_8E2 with inversion constant
     _serial->begin(SBUS_BAUD, SERIAL_8E2_RXINV);
+#endif
 }
 
 bool Sbus16Native::read() {

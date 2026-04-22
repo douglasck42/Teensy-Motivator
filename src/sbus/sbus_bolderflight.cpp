@@ -1,7 +1,11 @@
 #include "sbus_bolderflight.h"
 
 SbusHandler::SbusHandler(HardwareSerial* serial)
+#if defined(ARDUINO_ARCH_ESP32)
+    : _sbus(serial, SBUS_RX_PIN, SBUS_TX_PIN, true) {}
+#else
     : _sbus(serial) {}
+#endif
 
 void SbusHandler::begin() {
     _sbus.Begin();
