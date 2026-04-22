@@ -1,132 +1,212 @@
+#define BUILD_VERSION "0.1.4"
 #include <Arduino.h>
+//#include <LittleFS.h>
 #include "sbus/sbus_config.h"
-//#include "can_startup_scanner.h"
-//#include "vesc_can_detector.h"
+#include "settings.h"
+#include "dfplayer/dfp.h"
+#include "kyberpad/kyberpad.h"
+
+// Watching flags
+#ifndef WATCHDOG_ENABLED
+#define WATCHDOG_ENABLED 1
+#endif
+#ifndef WATCHDOG_TIMEOUT_SECONDS
+#define WATCHDOG_TIMEOUT_SECONDS 10
+#endif
+#if WATCHDOG_ENABLED
+#include <esp_task_wdt.h>
+#endif
+
+// Other timer values
+#ifndef HEARTBEAT_INTERVAL_MS
+#define HEARTBEAT_INTERVAL_MS 60000
+#endif
+#ifndef PRINT_ALL_INTERVAL_MS
+#define PRINT_ALL_INTERVAL_MS 30000
+#endif
+
+#ifndef WAIT_FOR_SERIAL
+#define WAIT_FOR_SERIAL 0
+#endif
 
 // Hand off the serial port here - Serial1 = pins 0/1 on Teensy 4.1
 SbusDriverType sbusHandler(&SBUS_SERIAL);
 
+// Define all functons:
+void inputOutputMapping(int channel, int value, unsigned long now);
+void ioVolume(int channel, int16_t value);
+
+
 // ========================= CONFIG =========================
-#define HEARTBEAT_INTERVAL 10000  // 10 seconds
-#define SBUS_DEADBAND 5           // minimum change to report
-
-// 0 = auto-detect, 16 = SBUS-16, 24 = SBUS-24
+// 0 = auto-detect, 16 = SBUS-16, 24 = SBUS-24 - this value is fungible in the hopes of adding in detection for SBUS-16 vs SBUS-24 in the future, but for now it is just used to select the driver and set the expected number of channels
 uint8_t SBUS_CHANNELS = 0;
-
-static uint32_t lastRead = 0;
-static uint32_t lastPrintAll = 0;
-const uint32_t SBUS_INTERVAL_MS = 15; // Slightly over 14ms SBUS frame rate
-
-// --- State ---
-int16_t lastChannels[24] = {0};
-
-// ========================= GLOBALS =========================
-unsigned long lastHeartbeat = 0;
-
-// Wait for USB Serial connection at startup?
-const bool WAIT_FOR_SERIAL = true;
-
-
-// Serial-channel debbugging
-bool serialDebugEnabled = true;
-const int16_t DEADBAND = 10;
-const uint32_t PRINT_ALL_INTERVAL_MS = 30000;
+const uint32_t SBUS_INTERVAL_MS = 15; // Slightly over 14ms SBUS frame rate, you probably don't want to change this
 
 // ========================= SETUP =========================
 void setup() {
     Serial.begin(115200);
+#if WAIT_FOR_SERIAL == 1
     if (WAIT_FOR_SERIAL) {
         while (!Serial) {
             delay(100);
         }
     }
-
-#if SBUS_DRIVER == SBUS_DRIVER_BOLDERFLIGHT
-    Serial.println("Driver: Bolderflight SBUS");
-#elif SBUS_DRIVER == SBUS_DRIVER_NATIVE16
-    Serial.println("Driver: Native SBUS-16");
+    Serial.println("Nano Motivator v" BUILD_VERSION ": starting up... (serial required)");
+#else
+    delay(2000); // Wait for Serial to be ready but non-blocking
+    Serial.println("Nano Motivator v" BUILD_VERSION ": starting up... (serial optional)");
 #endif
 
-    Serial.println("Locking SBUS-24");
-    SBUS_CHANNELS = 24;
+    // Enable watchdog (5 second timeout)
+    #if WATCHDOG_ENABLED
+    esp_task_wdt_init(WATCHDOG_TIMEOUT_SECONDS, true);
+    esp_task_wdt_add(NULL); // add current thread
+    #endif
 
-    Serial.println("SBUS-" + String(SBUS_CHANNELS) + " Raw Reader Started");
+    loadSettings();
+
+    //if (!LittleFS.begin(true)) {
+    //    Serial.println("LittleFS: mount failed");
+    //}
+    //if (LittleFS.exists("/config.json")) {
+    //    Serial.println("LittleFS: config.json EXISTS");
+    //} else {
+    //    Serial.println("LittleFS: config.json NOT FOUND");
+    //}
+
+#if SBUS_DRIVER == SBUS_DRIVER_BOLDERFLIGHT
+    Serial.println("Driver: Bolderflight SBUS-16");
+    SBUS_CHANNELS = 16;
+#elif SBUS_DRIVER == SBUS_DRIVER_NATIVE16
+    Serial.println("Driver: Native SBUS-16");
+    SBUS_CHANNELS = 16;
+#elif SBUS_DRIVER == SBUS_DRIVER_NATIVE24
+    Serial.println("Driver: Native SBUS-24");
+    SBUS_CHANNELS = 24;
+#endif
 
     sbusHandler.begin();
     Serial.println("SBUS handler ready!");
 
-    // run CAN scanner at startup (will no-op if CAN_STARTUP_SCANNER == 0)
-    //CanStartupScanner::runIfEnabled();
+    dfpSetup(); // Configure DFPlayer settings based on the detected state of the player and the SD card. This is called from setup() after initializing the player to ensure that the player is configured correctly before use.
 
-    //vesc_setup();  // Initialize VESC CAN detector
+    // force the volume to the mid level
+    dfpVolume(settings.audio.initial);
+    Serial.printf("DFPlayer: Volume set to %d of %d\n", settings.audio.initial, settings.audio.max);
+    settings.audio.volume = settings.audio.initial; // Update the settings with the new volume level
 
-    //sbusHandler.analyze();
-    //sbusHandler.analyze_timegap();
-    //sbusHandler.analyze_startstop();
-}
+    Serial.println("Nano Motivator now motivating! (setup complete)");
 
-// ========================= FUNCTIONS =========================
+} // setup()
 
+// Print out a given SBUS Channel (Remember that index 0 is channel 1 in SBUS)
 void printChannel(uint8_t index, int16_t value) {
-    Serial.printf("CH%d: %d\n", index + 1, value);
+    if (settings.system.debug_sbus) {
+        Serial.printf("SBUS: CH%d: %d\n", index + 1, value);
+    }
 }
 
+// Print out ALL SBUS Channels (Remember that index 0 is channel 1 in SBUS)
 void printAllChannels() {
-    Serial.print("--- ");
+    Serial.print("SBUS: ");
     for (uint8_t i = 0; i < SBUS_CHANNELS; i++) {
         Serial.printf("CH%d:%d ", i + 1, sbusHandler.channel(i));
     }
-    Serial.println("---");
+    Serial.println("");
 }
 
-void handleSerialOutput() {
-    if (!serialDebugEnabled) return;
+// Read the SBUS values and save them to the settings.channel[] array.
+// If a channel value has changed by more than the defined DEADBAND since the last read, print it out to the serial console and call the inputOutputMapping function to handle any necessary output changes based on the new input value.
+void handleSerialOutput(unsigned long now) {
+    for (uint8_t current_channel = 0; current_channel < SBUS_CHANNELS; current_channel++) {
+        int16_t current_value = sbusHandler.channel(current_channel);
+        
+        if (settings.system.debug_sbus) {
+            if (abs(current_value - settings.channel[current_channel].value) > settings.channel[current_channel].print_jitter) {
+                printChannel(current_channel, current_value);
+            }
+        }
 
-    for (uint8_t i = 0; i < SBUS_CHANNELS; i++) {
-        int16_t current = sbusHandler.channel(i);
-        if (abs(current - lastChannels[i]) > DEADBAND) {
-            printChannel(i, current);
-            lastChannels[i] = current;
+        if (current_value < settings.channel[current_channel].min) {
+            current_value = settings.channel[current_channel].min;
+        } else if (current_value > settings.channel[current_channel].max) {
+            current_value = settings.channel[current_channel].max;
+        }
+
+        if (settings.channel[current_channel].value != current_value) {
+            settings.channel[current_channel].value = current_value;
+            inputOutputMapping(current_channel, current_value, now);
         }
     }
 }
+
+// Handle the processing of Input/Outputs
+void inputOutputMapping(int channel, int value, unsigned long now) {
+
+    // Skip processing for this channel if it's not enabled
+    if (!settings.channel[channel].enabled) {
+        return; 
+    }
+
+    settings.channel[channel].value = value; // Update the current value for this channel in the settings
+
+    // Map the volume control channel to the DFPlayer volume
+    if (settings.channel[channel].volume_channel) {
+        ioVolume(channel, value);
+    // Map KyberPad button channels to the ioKyberpadButtons function (The Software-defined Screen)
+    } else if (settings.channel[channel].kyberpad_channel) {
+        ioKyberpadButtons(channel, value, now);
+    // Map KyberPad page selector channel to the ioKyberpadPage function (Two or Three way toggle)
+    } else if (settings.channel[channel].kyberpad_page_channel) {
+        ioKyberpadPage(channel, value);
+    }
+}
+
+void ioVolume(int channel, int16_t value) {
+    // Map the SBUS value to a volume level between 0 and 30
+    int16_t volume = map(value, settings.audio.sbus_min, settings.audio.sbus_max, settings.audio.min, settings.audio.max);
+    volume = constrain(volume, settings.audio.min, settings.audio.max);
+    if (volume != settings.audio.volume) {
+        dfpVolume(volume);
+        Serial.printf("DFPlayer: Volume set to %d of %d\n", volume, settings.audio.max);
+        settings.audio.volume = volume; // Update the settings with the new volume level
+    }
+}
+
 
 // ========================= LOOP =========================
 void loop() {
-    
-    // Heartbeat
+
+    // timers, these get set to current millis() at various points in the code to manage timing of different functions and features
+    static uint32_t millis_lastSbusRead = 0;
+    static uint32_t millis_lastPrintAll = 0;
+    static uint32_t millis_lastHeartbeat = 0;
     unsigned long now = millis();
-    if (now - lastHeartbeat >= HEARTBEAT_INTERVAL) {
-        Serial.println("Heartbeat: Teensy alive");
-        lastHeartbeat = now;
+
+    // watchdog reset to prevent system hangs, especially important if the SD card is missing or there's an issue with the DFPlayer that could cause blocking calls
+    #if WATCHDOG_ENABLED
+    esp_task_wdt_reset();
+    #endif
+
+    // Heartbeat
+    if (now - millis_lastHeartbeat >= HEARTBEAT_INTERVAL_MS) {
+        Serial.println("Heartbeat: Nano Motivator alive");
+        millis_lastHeartbeat = now;
     }
-    if (now - lastPrintAll >= PRINT_ALL_INTERVAL_MS) {
+    if (now - millis_lastPrintAll >= PRINT_ALL_INTERVAL_MS) {
         printAllChannels();
-        lastPrintAll = now;
+        millis_lastPrintAll = now;
+        millis_lastHeartbeat = now; // if we're printing all channels, also reset the heartbeat timer since we know the system is alive and well enough to print out all channel values
     }
 
-    if (millis() - lastRead >= SBUS_INTERVAL_MS) {
-        lastRead = millis();
+    // SBUS Input and output handling
+    if (millis() - millis_lastSbusRead >= SBUS_INTERVAL_MS) {
+        millis_lastSbusRead = millis();
         if (sbusHandler.read()) {
-            handleSerialOutput();
-            if (sbusHandler.failsafe())  Serial.println("** FAILSAFE **");
-            if (sbusHandler.lostFrame()) Serial.println("** LOST FRAME **");
+            handleSerialOutput(now);
+            if (sbusHandler.failsafe())  Serial.println("SBUS: ** FAILSAFE **");
+            if (sbusHandler.lostFrame()) Serial.println("SBUS: ** LOST FRAME **");
         }
     }
-
-    // VESC CAN detection and monitoring
-    //vesc_update();  // Process incoming CAN messages
-    //
-    //static uint32_t last_ping = 0;
-    //if (millis() - last_ping > 1000) {
-    //    vesc_sendPing(1);  // Ping motor ID 1 every 1 second
-    //    last_ping = millis();
-    //}
-    //
-    //static uint32_t last_print = 0;
-    //if (millis() - last_print > 2000) {
-    //    vesc_printStatus();
-    //    last_print = millis();
-    //}
 
 }
