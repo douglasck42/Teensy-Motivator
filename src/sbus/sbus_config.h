@@ -3,12 +3,11 @@
 #define SBUS_DRIVER_BOLDERFLIGHT   1
 #define SBUS_DRIVER_NATIVE16       2
 #define SBUS_DRIVER_NATIVE24       3
-
-#if !defined(SBUS_DRIVER)
-    #define SBUS_DRIVER SBUS_DRIVER_BOLDERFLIGHT  // default if not set
+#ifndef SBUS_SERIAL
+    #define SBUS_SERIAL Serial8  // Hardware v1.0
 #endif
-#if !defined(SBUS_SERIAL)
-    #define SBUS_SERIAL Serial5  // default if not set in platformio.ini; Pin 21 on Teensy 4.1
+#ifndef SBUS_DRIVER
+    #define SBUS_DRIVER SBUS_DRIVER_NATIVE24  // default if not set
 #endif
 
 #if SBUS_DRIVER == SBUS_DRIVER_BOLDERFLIGHT

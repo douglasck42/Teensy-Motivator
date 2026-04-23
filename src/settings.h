@@ -18,7 +18,7 @@ struct Settings {
         int initial = 15;
         int max = 30;
         bool mute = false;
-        int sbus_min = 172;    // The minimum SBUS value that corresponds to volume 0. This is used for mapping the SBUS input range to the volume range.
+        int sbus_min = 586;    // The minimum SBUS value that corresponds to volume 0. This is used for mapping the SBUS input range to the volume range.
         int sbus_max = 1811;   // The maximum SBUS value that corresponds to the maximum volume. This is used for mapping the SBUS input range to the volume range.
         bool dfp_debug = false; // Flag to indicate whether to print DFPlayer-related debug information to the serial console. This can be useful for verifying that audio controls are working as expected, but can be very verbose, so it is disabled by default.
     } audio;
@@ -36,7 +36,9 @@ struct Settings {
         bool enabled = false; // Flag to indicate if this channel is enabled for processing. This can be used to ignore certain channels without having to change the code logic for reading SBUS input.
         int value = 0; // The raw SBUS value read from the channel. This is used for debugging and mapping purposes.
         int min = 100; // The minimum SBUS value for this channel, values below this will be treated as min
-        int max = 2000; // The maximum SBUS value for this channel, values above this will be treated as max
+        int max = 2100; // The maximum SBUS value for this channel, values above this will be treated as max
+        int min_us = 992;  // The minimum µs value for this channel, per the Maestro GUI
+        int max_us = 2000; // The maximum µs value for this channel, per the Maestro GUI
         int print_jitter = 10; // Minimum change in SBUS value to report when debugging. This is used to prevent spamming the serial output with minor fluctuations in SBUS input.
         String description;
         String short_description;

@@ -5,6 +5,7 @@
 #include "settings.h"
 #include "dfplayer/dfp.h"
 #include "kyberpad/kyberpad.h"
+#include <PololuMaestro.h>
 
 // Watching flags
 #ifndef WATCHDOG_ENABLED
@@ -31,6 +32,7 @@
 
 // Hand off the serial port here - Serial1 = pins 0/1 on Teensy 4.1
 SbusDriverType sbusHandler(&SBUS_SERIAL);
+MiniMaestro maestro(Serial7);  // or whichever serial port
 
 // Define all functons:
 void inputOutputMapping(int channel, int value, unsigned long now);
@@ -41,6 +43,8 @@ void ioVolume(int channel, int16_t value);
 // 0 = auto-detect, 16 = SBUS-16, 24 = SBUS-24 - this value is fungible in the hopes of adding in detection for SBUS-16 vs SBUS-24 in the future, but for now it is just used to select the driver and set the expected number of channels
 uint8_t SBUS_CHANNELS = 0;
 const uint32_t SBUS_INTERVAL_MS = 15; // Slightly over 14ms SBUS frame rate, you probably don't want to change this
+constexpr uint32_t SBUS_LATE_WARNING_MS = 5;   // warn if we're this many ms late
+constexpr uint32_t SBUS_WARN_COOLDOWN_MS   = 1000; // suppress repeated warnings for this long
 
 // ========================= SETUP =========================
 void setup() {
@@ -56,6 +60,9 @@ void setup() {
     delay(2000); // Wait for Serial to be ready but non-blocking
     Serial.println("Nano Motivator v" BUILD_VERSION ": starting up... (serial optional)");
 #endif
+
+    Serial.print("Maestro: Init Serial7");
+    Serial7.begin(57600);
 
     // Enable watchdog (5 second timeout)
     #if WATCHDOG_ENABLED
@@ -181,6 +188,10 @@ void loop() {
     static uint32_t millis_lastSbusRead = 0;
     static uint32_t millis_lastPrintAll = 0;
     static uint32_t millis_lastHeartbeat = 0;
+    static uint32_t millis_lastSbusWarn = 0; // tracks last time we emitted a late warning
+    static uint32_t millis_maestro = 0; //
+    static uint32_t maestro_position = 6000; //
+
     unsigned long now = millis();
 
     // watchdog reset to prevent system hangs, especially important if the SD card is missing or there's an issue with the DFPlayer that could cause blocking calls
@@ -200,12 +211,35 @@ void loop() {
     }
 
     // SBUS Input and output handling
-    if (millis() - millis_lastSbusRead >= SBUS_INTERVAL_MS) {
-        millis_lastSbusRead = millis();
+    if (now - millis_lastSbusRead >= SBUS_INTERVAL_MS) {
+
+        // Generate warnings if we're running late - indictive of code running to slow or too blocking somewhere else
+        uint32_t actualInterval = now - millis_lastSbusRead;
+        if (actualInterval > SBUS_INTERVAL_MS + SBUS_LATE_WARNING_MS) {
+            if (now - millis_lastSbusWarn >= SBUS_WARN_COOLDOWN_MS) {
+                millis_lastSbusWarn = now;
+                Serial.printf("[WARN] SBUS poll late: %lu ms (expected %u ms)\n",
+                            actualInterval, SBUS_INTERVAL_MS);
+            }
+        }
+
+        // Update the timer and read the sbus
+        millis_lastSbusRead = now;
         if (sbusHandler.read()) {
             handleSerialOutput(now);
             if (sbusHandler.failsafe())  Serial.println("SBUS: ** FAILSAFE **");
             if (sbusHandler.lostFrame()) Serial.println("SBUS: ** LOST FRAME **");
+        }
+
+        int32_t qus_min = settings.channel[1].min_us * 4;
+        int32_t qus_max = settings.channel[1].max_us * 4;
+
+        maestro_position = map(settings.channel[1].value, settings.channel[1].min, settings.channel[1].max, qus_min, qus_max);
+        maestro_position = constrain(maestro_position, qus_min, qus_max);
+        maestro.setTarget(0, maestro_position);
+        if (now - millis_maestro >= 1500) {
+            millis_maestro = now;
+            Serial.printf("Channel 2 SBUS %d Maestro %d\n", settings.channel[1].value, maestro_position);
         }
     }
 

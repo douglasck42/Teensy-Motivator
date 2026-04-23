@@ -15,36 +15,55 @@ void resetSettingsDefaults() {
 // -------------------- LOAD --------------------
 void loadSettings() {
     Serial.println("Settings: loadSettings()");
-
+    settings.system.debug_sbus = true;
     Serial.printf("  Default volume: %d\n", settings.audio.volume);
     Serial.printf("  Debug SBUS: %s\n", settings.system.debug_sbus ? "ON" : "OFF");
 
     settings.system.debug_io_mapping = true;
 
     Serial.println("Configuring KyberPad settings...");
+    // Human Channel 1, SBUS Channel 1 (0-indexed in code)
+    settings.channel[zIdx(1)].enabled = true;
+    settings.channel[zIdx(1)].description = "Ch1";
+    settings.channel[zIdx(1)].short_description = "Ch1";
+    settings.channel[zIdx(1)].min = 0;
+    settings.channel[zIdx(1)].max = 2500;
+    settings.channel[zIdx(1)].min_us = 496;
+    settings.channel[zIdx(1)].max_us = 2496;
+
+    // Human Channel 2, SBUS Channel 2 (0-indexed in code)
+    settings.channel[zIdx(2)].enabled = true;
+    settings.channel[zIdx(2)].description = "Ch2";
+    settings.channel[zIdx(2)].short_description = "Ch2";
+    settings.channel[zIdx(2)].min = 0;
+    settings.channel[zIdx(2)].max = 2500;
+    settings.channel[zIdx(2)].min_us = 496;
+    settings.channel[zIdx(2)].max_us = 2496;
+
+    Serial.println("Configuring KyberPad settings...");
     // Human Channel 22, SBUS Channel 21 (0-indexed in code), is the volume control, which is mapped to a continuous range of volume levels from 0 to 30.
-    settings.channel[22 - 1].enabled = true;
-    settings.channel[22 - 1].description = "Volume";
-    settings.channel[22 - 1].short_description = "Vol";
-    settings.channel[22 - 1].volume_channel = true;
-    settings.channel[22 - 1].min = 172;
-    settings.channel[22 - 1].max = 1811;
+    settings.channel[zIdx(22)].enabled = true;
+    settings.channel[zIdx(22)].description = "Volume";
+    settings.channel[zIdx(22)].short_description = "Vol";
+    settings.channel[zIdx(22)].volume_channel = true;
+    settings.channel[zIdx(22)].min = 172;
+    settings.channel[zIdx(22)].max = 1811;
 
     // Human Channel 23, SBUS Channel 22 (0-indexed in code), is the KyberPad page selector, which uses the same SBUS range as volume control but is mapped to discrete page states instead of a continuous volume level.
-    settings.channel[23 - 1].enabled = true;
-    settings.channel[23 - 1].description = "Kyperpad Page Toggle";
-    settings.channel[23 - 1].short_description = "kPg";
-    settings.channel[23 - 1].kyberpad_page_channel = true;
-    settings.channel[23 - 1].min = 172;
-    settings.channel[23 - 1].max = 1811;
+    settings.channel[zIdx(23)].enabled = true;
+    settings.channel[zIdx(23)].description = "Kyperpad Page Toggle";
+    settings.channel[zIdx(23)].short_description = "kPg";
+    settings.channel[zIdx(23)].kyberpad_page_channel = true;
+    settings.channel[zIdx(23)].min = 172;
+    settings.channel[zIdx(23)].max = 1811;
 
     // Human Channel 24, SBUS Channel 23 (0-indexed in code), is the KyberPad software buttons themselves
-    settings.channel[24 - 1].enabled = true;
-    settings.channel[24 - 1].description = "Kyperpad Software Buttons";
-    settings.channel[24 - 1].short_description = "kSb";
-    settings.channel[24 - 1].kyberpad_channel = true;
-    settings.channel[24 - 1].min = 172;
-    settings.channel[24 - 1].max = 1811;
+    settings.channel[zIdx(24)].enabled = true;
+    settings.channel[zIdx(24)].description = "Kyperpad Software Buttons";
+    settings.channel[zIdx(24)].short_description = "kSb";
+    settings.channel[zIdx(24)].kyberpad_channel = true;
+    settings.channel[zIdx(24)].min = 172;
+    settings.channel[zIdx(24)].max = 1811;
 
     Serial.println("Configuring KyberPad Button Channels...");
     //settings.Kyperpadbuttonvalues[0].sbus_value = 172;   // No buttons pressed value
@@ -205,66 +224,9 @@ void loadSettings() {
             Serial.printf("  Channel %d: %s\n", i + 1, settings.channel[i].description.c_str());
         }
     }   
-//    if (!LittleFS.exists(FILE_PATH)) {
-//        Serial.println("No config found, creating defaults...");
-//        resetSettingsDefaults();
-//        saveSettings();
-//        return;
-//    }
-
-//    File file = LittleFS.open(FILE_PATH, "r");
-//    if (!file) {
-//        Serial.println("Failed to open config, using defaults");
-//        resetSettingsDefaults();
-//        return;
-//    }
-
-//    StaticJsonDocument<512> doc;
-//    DeserializationError err = deserializeJson(doc, file);
-//    file.close();
-//
-//    if (err) {
-//        Serial.println("JSON parse failed, resetting");
-//        resetSettingsDefaults();
-//        return;
-//    }
-//
-//    // -------- AUDIO --------
-//    settings.audio.volume = doc["audio"]["volume"] | 15;
-//    settings.audio.mute   = doc["audio"]["mute"]   | false;
-//
-//    // -------- MOTION --------
-//    settings.motion.speed = doc["motion"]["speed"] | 80;
-//    settings.motion.accel = doc["motion"]["accel"] | 50;
-//
-//    // -------- SYSTEM --------
-//    settings.system.debug = doc["system"]["debug"] | false;
-//
-//    Serial.println("Settings loaded");
 }
 
 // -------------------- SAVE --------------------
 void saveSettings() {
     Serial.println("Settings: saveSettings() not yet implemented!");
-//
-//    StaticJsonDocument<512> doc;
-//
-//    doc["audio"]["volume"] = settings.audio.volume;
-//    doc["audio"]["mute"]   = settings.audio.mute;
-//
-//    doc["motion"]["speed"] = settings.motion.speed;
-//    doc["motion"]["accel"] = settings.motion.accel;
-//
-//    doc["system"]["debug"] = settings.system.debug;
-//
-//    File file = LittleFS.open(FILE_PATH, "w");
-//    if (!file) {
-//        Serial.println("Failed to write config");
-//        return;
-//    }
-//
-//    serializeJsonPretty(doc, file);
-//    file.close();
-//
-//    Serial.println("Settings saved");
 }

@@ -4,7 +4,7 @@
 
 // Physical Pinouts
 #ifndef DF_SERIAL
-#define DF_SERIAL Serial2
+#define DF_SERIAL Serial2   # Hardware v1.0
 #endif
 
 // Software Serial for DFPlayer on pins 2 (RX) and 3 (TX) on the Nano, but use Serial2 hardware serial on the ESP32 if available
