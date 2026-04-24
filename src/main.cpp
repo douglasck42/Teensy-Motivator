@@ -156,11 +156,20 @@ void inputFunctions(unsigned long now) {
     for (uint8_t current_channel = 0; current_channel < SBUS_CHANNELS; current_channel++) {
         auto& ch = settings.ichannel[current_channel];
         if (ch.updated) {
-            ch.updated = false;     // We're calling the function, turn this off now
+                 
             switch (ch.channelFunction) {
-                case iChannelFunction::KYBERPAD:      ioKyberpadButtons(current_channel, now);  break;
-                case iChannelFunction::KYBERPAD_PAGE: ioKyberpadPage(current_channel);          break;
-                case iChannelFunction::VOLUME:        ioVolume(current_channel);                break;   
+                case iChannelFunction::KYBERPAD:
+                    ch.updated = false;     // We're calling the function, turn this off now
+                    ioKyberpadButtons(current_channel, now);
+                    break;
+                case iChannelFunction::KYBERPAD_PAGE:
+                    ch.updated = false;     // We're calling the function, turn this off now
+                    ioKyberpadPage(current_channel);
+                    break;
+                case iChannelFunction::VOLUME:
+                    ch.updated = false;     // We're calling the function, turn this off now
+                    ioVolume(current_channel);
+                    break;
                 default: break;
             }
         }
@@ -169,16 +178,63 @@ void inputFunctions(unsigned long now) {
 
 // consider the output channels and make things happen
 void sendOuputs(unsigned long now) {
+    static unsigned long millis_output = now;
+    bool do_debug = (now - millis_output >= settings.system.per_channel_serial_output_throttle);
+    bool did_debug = false;
+    for (uint8_t current_channel = 0; current_channel < NUM_OUTPUT_CHANNELS; current_channel++) {
+        auto& och = settings.ochannel[current_channel];
+        if (!och.enabled || !och.updated) continue;
+        och.updated = false;        // we're processing the channel now, clear this
+
+        // splash of debug output
+        if (och.serial_debug_output && do_debug) {
+            ioPrintChannel(current_channel, och.ichannel);
+            did_debug = true;
+        }
+
+        if (och.serial_port_out == 7) {
+            maestro.setTarget(Serial7, och.maestro_id, och.maestro_ch, och.us_value);
+        }
+    }
+    if (do_debug && did_debug) millis_output = now;
 }
 
 // Handle the processing of Input/Outputs
 void outputMapping(unsigned long now) {
+    #define outputMappingDebug 0    // Set to 1 to enable the outputMapping debug serial output; developer special
+
+    #if outputMappingDebug == 1
+    static unsigned long millis_output = now;
+    bool do_debug = (now - millis_output >= settings.system.per_channel_serial_output_throttle);
+    bool did_debug = false;
+    #endif
+
     for (uint8_t current_channel = 0; current_channel < NUM_OUTPUT_CHANNELS; current_channel++) {
+        auto& och = settings.ochannel[current_channel];
+
         // Skip processing for this channel if it's not enabled
-        if (!settings.ichannel[current_channel].enabled) {
-            return; 
+        if (!och.enabled) continue; 
+
+        if (och.ichannel_enabled) {
+            auto& ich = settings.ichannel[och.ichannel];
+            if (ich.updated) {
+                och.updated = true;
+                och.us_value = ich.us_value;
+                ich.updated = false;        // we've processed it, clear it
+                #if outputMappingDebug == 1
+                if (och.serial_debug_output && do_debug) {
+                    ioPrintChannel(current_channel, och.ichannel);
+                    did_debug = true;
+                }
+                #endif
+            }
         }
     }
+
+    #if outputMappingDebug == 1
+    if (do_debug && did_debug) millis_output = now;
+    #endif
+
 }
 
 void ioVolume(uint8_t channel) {

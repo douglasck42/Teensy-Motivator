@@ -184,3 +184,4 @@ uint16_t sbusGetMax(uint8_t channel);
 uint16_t usGetMin(ChannelType type, uint8_t channel);
 uint16_t usGetMax(ChannelType type, uint8_t channel);
 void printChannel(ChannelType type, uint8_t channel);
+void ioPrintChannel(uint8_t ochannel, uint8_t ichannel);

@@ -397,7 +397,7 @@ void printSettings() {
         }
     }
 
-    Serial.println("Input Channels:");
+    Serial.println("\nInput Channels:");
     Serial.println("  Ch  Description               µs Min  µs Max  sbus Min  sbus Max");
     Serial.println("  --  -----------------------   ------  ------  --------  --------");
     for (uint8_t current_channel = 0; current_channel < settings.system.num_ichannels; current_channel++) {
@@ -425,7 +425,7 @@ void printSettings() {
     }   
 
 
-    Serial.println("Output Channels:");
+    Serial.println("\nOutput Channels:");
     Serial.println("  Ch  Description               I-CH  µs Min  µs Max  Serial    M-ID  M-CH");
     Serial.println("  --  -----------------------   ----  ------  ------  --------  ----  ----");
     for (uint8_t channel = 0; channel < settings.system.num_ochannels; channel++) {
@@ -514,4 +514,10 @@ void printChannel(ChannelType type, uint8_t channel) {
         uint8_t us_percent = map(ch.us_value, usGetMin(type, channel), usGetMax(type, channel), 0, 100);
         Serial.printf("Output Ch %d: %dµs (%d%%)\n", channel + 1, ch.us_value, us_percent);
     }
+}
+
+void ioPrintChannel(uint8_t ochannel, uint8_t ichannel) {
+    auto& ich = settings.ichannel[ichannel];
+    auto& och = settings.ochannel[ochannel];
+    Serial.printf("IO Mapped Output Ch %d to %dµs from iCh %d %dµs\n", ochannel, och.us_value, ichannel+1, ich.us_value);
 }
