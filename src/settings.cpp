@@ -26,19 +26,17 @@ void loadSettings() {
     settings.channel[zIdx(1)].enabled = true;
     settings.channel[zIdx(1)].description = "Ch1";
     settings.channel[zIdx(1)].short_description = "Ch1";
-    settings.channel[zIdx(1)].min = 0;
-    settings.channel[zIdx(1)].max = 2500;
-    settings.channel[zIdx(1)].min_us = 496;
-    settings.channel[zIdx(1)].max_us = 2496;
+    settings.channel[zIdx(1)].sbus_abs_minmax = false;
+    settings.channel[zIdx(1)].maestro_min = 496;
+    settings.channel[zIdx(1)].maestro_max = 2496;
 
     // Human Channel 2, SBUS Channel 2 (0-indexed in code)
     settings.channel[zIdx(2)].enabled = true;
     settings.channel[zIdx(2)].description = "Ch2";
     settings.channel[zIdx(2)].short_description = "Ch2";
-    settings.channel[zIdx(2)].min = 0;
-    settings.channel[zIdx(2)].max = 2500;
-    settings.channel[zIdx(2)].min_us = 496;
-    settings.channel[zIdx(2)].max_us = 2496;
+    settings.channel[zIdx(1)].sbus_abs_minmax = false;
+    settings.channel[zIdx(2)].maestro_min = 496;
+    settings.channel[zIdx(2)].maestro_max = 2496;
 
     Serial.println("Configuring KyberPad settings...");
     // Human Channel 22, SBUS Channel 21 (0-indexed in code), is the volume control, which is mapped to a continuous range of volume levels from 0 to 30.
@@ -46,24 +44,18 @@ void loadSettings() {
     settings.channel[zIdx(22)].description = "Volume";
     settings.channel[zIdx(22)].short_description = "Vol";
     settings.channel[zIdx(22)].volume_channel = true;
-    settings.channel[zIdx(22)].min = 172;
-    settings.channel[zIdx(22)].max = 1811;
 
     // Human Channel 23, SBUS Channel 22 (0-indexed in code), is the KyberPad page selector, which uses the same SBUS range as volume control but is mapped to discrete page states instead of a continuous volume level.
     settings.channel[zIdx(23)].enabled = true;
     settings.channel[zIdx(23)].description = "Kyperpad Page Toggle";
     settings.channel[zIdx(23)].short_description = "kPg";
     settings.channel[zIdx(23)].kyberpad_page_channel = true;
-    settings.channel[zIdx(23)].min = 172;
-    settings.channel[zIdx(23)].max = 1811;
 
     // Human Channel 24, SBUS Channel 23 (0-indexed in code), is the KyberPad software buttons themselves
     settings.channel[zIdx(24)].enabled = true;
     settings.channel[zIdx(24)].description = "Kyperpad Software Buttons";
     settings.channel[zIdx(24)].short_description = "kSb";
     settings.channel[zIdx(24)].kyberpad_channel = true;
-    settings.channel[zIdx(24)].min = 172;
-    settings.channel[zIdx(24)].max = 1811;
 
     Serial.println("Configuring KyberPad Button Channels...");
     //settings.Kyperpadbuttonvalues[0].sbus_value = 172;   // No buttons pressed value
@@ -206,9 +198,9 @@ void loadSettings() {
 
 
     Serial.println("KyberPad Buttons:");
-    for (int page = 0; page < settings.kyberpad.pages; page++) {
+    for (uint8_t page = 0; page < settings.kyberpad.pages; page++) {
         for (int row = 0; row < settings.kyberpad.rows; row++) {
-            for (int col = 0; col < settings.kyberpad.columns; col++) {
+            for (uint8_t col = 0; col < settings.kyberpad.columns; col++) {
                 // int button_index = (page - 1) * settings.kyberpad.rows * settings.kyberpad.columns + (row - 1) * settings.kyberpad.columns + col;
                 if (settings.kyberpad.serial_print_button_mapping) {
                     Serial.printf("  KyberPad Button Page %d Row %d Column %d: %s\n", page + 1, row + 1, col + 1, settings.kyberpadbuttons[page][row][col].description.c_str());
@@ -219,7 +211,7 @@ void loadSettings() {
     }
 
     Serial.println("KyberPad Channels:");
-    for (int i = 0; i < settings.system.num_channels; i++) {
+    for (uint8_t i = 0; i < settings.system.num_channels; i++) {
         if (settings.channel[i].enabled) {
             Serial.printf("  Channel %d: %s\n", i + 1, settings.channel[i].description.c_str());
         }
@@ -229,4 +221,44 @@ void loadSettings() {
 // -------------------- SAVE --------------------
 void saveSettings() {
     Serial.println("Settings: saveSettings() not yet implemented!");
+}
+
+uint16_t sbusGetMin(uint8_t channel) {
+    if (settings.channel[channel].sbus_min > 0) {
+        return settings.channel[channel].sbus_min;                  // return the configured min
+    } else if (settings.channel[channel].sbus_abs_minmax) {    // if True use the system-wide absolute min/max
+        return settings.system.sbus_abs_min;
+    } else {                                                     // Return the system-wide standard default values
+        return settings.system.sbus_standard_min;
+    }
+}
+
+uint16_t sbusGetMax(uint8_t channel) {
+    if (settings.channel[channel].sbus_max > 0) {
+        return settings.channel[channel].sbus_max;                  // return the configured min
+    } else if (settings.channel[channel].sbus_abs_minmax) {    // if True use the system-wide absolute min/max
+        return settings.system.sbus_abs_max;
+    } else {                                                     // Return the system-wide standard default values
+        return settings.system.sbus_standard_max;
+    }
+}
+
+uint16_t maestroGetMin(uint8_t channel) {
+    if (settings.channel[channel].maestro_min > 0) {
+        return settings.channel[channel].maestro_min;                  // return the configured min
+    } else if (settings.channel[channel].maestro_abs_minmax) {    // if True use the system-wide absolute min/max
+        return settings.system.maestro_abs_min;
+    } else {                                                     // Return the system-wide standard default values
+        return settings.system.maestro_standard_min;
+    }
+}
+
+uint16_t maestroGetMax(uint8_t channel) {
+    if (settings.channel[channel].maestro_max > 0) {
+        return settings.channel[channel].maestro_max;                  // return the configured min
+    } else if (settings.channel[channel].maestro_abs_minmax) {    // if True use the system-wide absolute min/max
+        return settings.system.maestro_abs_max;
+    } else {                                                     // Return the system-wide standard default values
+        return settings.system.maestro_standard_max;
+    }
 }

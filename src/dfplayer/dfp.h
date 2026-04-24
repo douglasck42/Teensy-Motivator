@@ -14,7 +14,7 @@
 extern DFRobotDFPlayerMini myDFPlayer;
 
 void dfpSetup();
-void dfpPrintDetail(uint8_t type, int value);
+void dfpPrintDetail(uint8_t type, uint16_t value);
 void dfpStop();
-void dfpPlay(int fileNumber);
-void dfpVolume(int volume);
+void dfpPlay(uint16_t fileNumber);
+void dfpVolume(uint8_t volume);

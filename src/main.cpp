@@ -35,16 +35,16 @@ SbusDriverType sbusHandler(&SBUS_SERIAL);
 MiniMaestro maestro(Serial7);  // or whichever serial port
 
 // Define all functons:
-void inputOutputMapping(int channel, int value, unsigned long now);
-void ioVolume(int channel, int16_t value);
+void inputOutputMapping(uint8_t channel, unsigned long now);
+void ioVolume(uint8_t channel);
 
 
 // ========================= CONFIG =========================
 // 0 = auto-detect, 16 = SBUS-16, 24 = SBUS-24 - this value is fungible in the hopes of adding in detection for SBUS-16 vs SBUS-24 in the future, but for now it is just used to select the driver and set the expected number of channels
 uint8_t SBUS_CHANNELS = 0;
-const uint32_t SBUS_INTERVAL_MS = 15; // Slightly over 14ms SBUS frame rate, you probably don't want to change this
-constexpr uint32_t SBUS_LATE_WARNING_MS = 5;   // warn if we're this many ms late
-constexpr uint32_t SBUS_WARN_COOLDOWN_MS   = 1000; // suppress repeated warnings for this long
+const uint8_t SBUS_INTERVAL_MS = 15; // Slightly over 14ms SBUS frame rate, you probably don't want to change this
+constexpr uint8_t SBUS_LATE_WARNING_MS = 5;   // warn if we're this many ms late
+constexpr uint16_t SBUS_WARN_COOLDOWN_MS   = 1000; // suppress repeated warnings for this long
 
 // ========================= SETUP =========================
 void setup() {
@@ -129,49 +129,42 @@ void handleSerialOutput(unsigned long now) {
         int16_t current_value = sbusHandler.channel(current_channel);
         
         if (settings.system.debug_sbus) {
-            if (abs(current_value - settings.channel[current_channel].value) > settings.channel[current_channel].print_jitter) {
+            if (abs(current_value - settings.channel[current_channel].sbus_value) > settings.channel[current_channel].print_jitter) {
                 printChannel(current_channel, current_value);
             }
         }
 
-        if (current_value < settings.channel[current_channel].min) {
-            current_value = settings.channel[current_channel].min;
-        } else if (current_value > settings.channel[current_channel].max) {
-            current_value = settings.channel[current_channel].max;
-        }
-
-        if (settings.channel[current_channel].value != current_value) {
-            settings.channel[current_channel].value = current_value;
-            inputOutputMapping(current_channel, current_value, now);
+        current_value = constrain(current_value, sbusGetMin(current_channel), sbusGetMax(current_channel));
+        if (settings.channel[current_channel].sbus_value != current_value) {
+            settings.channel[current_channel].sbus_value = current_value;
+            inputOutputMapping(current_channel, now);
         }
     }
 }
 
 // Handle the processing of Input/Outputs
-void inputOutputMapping(int channel, int value, unsigned long now) {
+void inputOutputMapping(uint8_t channel, unsigned long now) {
 
     // Skip processing for this channel if it's not enabled
     if (!settings.channel[channel].enabled) {
         return; 
     }
 
-    settings.channel[channel].value = value; // Update the current value for this channel in the settings
-
     // Map the volume control channel to the DFPlayer volume
     if (settings.channel[channel].volume_channel) {
-        ioVolume(channel, value);
+        ioVolume(channel);
     // Map KyberPad button channels to the ioKyberpadButtons function (The Software-defined Screen)
     } else if (settings.channel[channel].kyberpad_channel) {
-        ioKyberpadButtons(channel, value, now);
+        ioKyberpadButtons(channel, now);
     // Map KyberPad page selector channel to the ioKyberpadPage function (Two or Three way toggle)
     } else if (settings.channel[channel].kyberpad_page_channel) {
-        ioKyberpadPage(channel, value);
+        ioKyberpadPage(channel);
     }
 }
 
-void ioVolume(int channel, int16_t value) {
+void ioVolume(uint8_t channel) {
     // Map the SBUS value to a volume level between 0 and 30
-    int16_t volume = map(value, settings.audio.sbus_min, settings.audio.sbus_max, settings.audio.min, settings.audio.max);
+    int8_t volume = map(settings.channel[channel].sbus_value, settings.audio.sbus_min, settings.audio.sbus_max, settings.audio.min, settings.audio.max);
     volume = constrain(volume, settings.audio.min, settings.audio.max);
     if (volume != settings.audio.volume) {
         dfpVolume(volume);
@@ -185,12 +178,12 @@ void ioVolume(int channel, int16_t value) {
 void loop() {
 
     // timers, these get set to current millis() at various points in the code to manage timing of different functions and features
-    static uint32_t millis_lastSbusRead = 0;
-    static uint32_t millis_lastPrintAll = 0;
-    static uint32_t millis_lastHeartbeat = 0;
-    static uint32_t millis_lastSbusWarn = 0; // tracks last time we emitted a late warning
-    static uint32_t millis_maestro = 0; //
-    static uint32_t maestro_position = 6000; //
+    static unsigned long millis_lastSbusRead = 0;
+    static unsigned long millis_lastPrintAll = 0;
+    static unsigned long millis_lastHeartbeat = 0;
+    static unsigned long millis_lastSbusWarn = 0; // tracks last time we emitted a late warning
+    static unsigned long millis_maestro = 0; //
+    static uint16_t maestro_position = 6000; //
 
     unsigned long now = millis();
 
@@ -211,15 +204,14 @@ void loop() {
     }
 
     // SBUS Input and output handling
-    if (now - millis_lastSbusRead >= SBUS_INTERVAL_MS) {
+    if ((now - millis_lastSbusRead) >= SBUS_INTERVAL_MS) {
 
         // Generate warnings if we're running late - indictive of code running to slow or too blocking somewhere else
-        uint32_t actualInterval = now - millis_lastSbusRead;
-        if (actualInterval > SBUS_INTERVAL_MS + SBUS_LATE_WARNING_MS) {
-            if (now - millis_lastSbusWarn >= SBUS_WARN_COOLDOWN_MS) {
+        unsigned long actualInterval = now - millis_lastSbusRead;
+        if (actualInterval > (SBUS_INTERVAL_MS + SBUS_LATE_WARNING_MS)) {
+            if ((now - millis_lastSbusWarn) >= SBUS_WARN_COOLDOWN_MS) {
                 millis_lastSbusWarn = now;
-                Serial.printf("[WARN] SBUS poll late: %lu ms (expected %u ms)\n",
-                            actualInterval, SBUS_INTERVAL_MS);
+                Serial.printf("[WARN] SBUS poll late: %lu ms (expected %u ms)\n", actualInterval, SBUS_INTERVAL_MS);
             }
         }
 
@@ -231,15 +223,16 @@ void loop() {
             if (sbusHandler.lostFrame()) Serial.println("SBUS: ** LOST FRAME **");
         }
 
-        int32_t qus_min = settings.channel[1].min_us * 4;
-        int32_t qus_max = settings.channel[1].max_us * 4;
+        uint8_t channel = 1;
+        uint16_t qus_min = maestroGetMin(channel) * 4;
+        uint16_t qus_max = maestroGetMax(channel) * 4;
 
-        maestro_position = map(settings.channel[1].value, settings.channel[1].min, settings.channel[1].max, qus_min, qus_max);
+        maestro_position = map(settings.channel[channel].sbus_value, sbusGetMin(channel), sbusGetMax(channel), qus_min, qus_max);
         maestro_position = constrain(maestro_position, qus_min, qus_max);
         maestro.setTarget(0, maestro_position);
         if (now - millis_maestro >= 1500) {
             millis_maestro = now;
-            Serial.printf("Channel 2 SBUS %d Maestro %d\n", settings.channel[1].value, maestro_position);
+            Serial.printf("Channel 2 SBUS %d Maestro %d\n", settings.channel[1].sbus_value, maestro_position);
         }
     }
 
