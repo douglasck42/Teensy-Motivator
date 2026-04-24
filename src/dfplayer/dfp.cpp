@@ -64,7 +64,7 @@ void dfpSetup() {
 }
 
 // ========================= FUNCTIONS =========================
-void dfpPrintDetail(uint8_t type, int value){
+void dfpPrintDetail(uint8_t type, uint16_t value){
   switch (type) {
     case TimeOut:
       Serial.println(F("DFPlayer: Time Out!"));
@@ -134,14 +134,14 @@ void dfpStop() {
   myDFPlayer.stop(); // Stop any currently playing audio to prevent overlapping audio files when changing pages or pressing buttons that are set to stop further processing of button inputs
 }
 
-void dfpPlay(int fileNumber) {
+void dfpPlay(uint16_t fileNumber) {
   if (settings.audio.dfp_debug) {
     Serial.printf("DFPlayer: Playing file number %d\n", fileNumber);
   }
   myDFPlayer.playMp3Folder(fileNumber); // Play the selected audio file for this button
 }
 
-void dfpVolume(int volume) {
+void dfpVolume(uint8_t volume) {
   if (settings.audio.dfp_debug) {
     Serial.printf("DFPlayer: Setting volume to %d\n", volume);
   }
