@@ -1,4 +1,4 @@
-#define BUILD_VERSION "0.1.4"
+#define BUILD_VERSION "0.2.0"
 #include <Arduino.h>
 //#include <LittleFS.h>
 #include "sbus/sbus_config.h"
@@ -114,6 +114,20 @@ void setup() {
 
 } // setup()
 
+Stream& getSerialPort(uint8_t port) {
+    switch (port) {
+        case 1: return Serial1;
+        case 2: return Serial2;
+        case 3: return Serial3;
+        case 4: return Serial4;
+        case 5: return Serial5;
+        case 6: return Serial6;
+        case 7: return Serial7;
+        case 8: return Serial8;
+        default: return Serial;  // fallback to USB serial
+    }
+}
+
 // Print out ALL SBUS Channels (Remember that index 0 is channel 1 in SBUS)
 void printAllChannels() {
     Serial.print("SBUS: ");
@@ -192,8 +206,8 @@ void sendOuputs(unsigned long now) {
             did_debug = true;
         }
 
-        if (och.serial_port_out == 7) {
-            maestro.setTarget(Serial7, och.maestro_id, och.maestro_ch, och.us_value);
+        if (och.serial_port_out > 2 && och.serial_port_out < 9 && och.maestro_id > 0) {
+            maestro.setTarget(getSerialPort(och.serial_port_out), och.maestro_id, och.maestro_ch, och.us_value);
         }
     }
     if (do_debug && did_debug) millis_output = now;

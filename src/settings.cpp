@@ -306,10 +306,10 @@ void loadSettings() {
     {
         auto& ch = settings.ochannel[0];    // We'll probably actually call this Channel 0 on the Webpage
         ch.enabled = true;
-        ch.description = "Throttle";
+        ch.description = "Left Throttle";
         ch.us_min = 496;
         ch.us_max = 2496;
-        ch.serial_debug_output = true;
+        ch.serial_debug_output = false;
         ch.ichannel_enabled = true;
         ch.ichannel = zIdx(1);              // Human channel 1
         ch.serial_port_out = 7;
@@ -320,8 +320,8 @@ void loadSettings() {
     {
         auto& ch = settings.ochannel[1];
         ch.enabled = true;
-        ch.description = "Rudder";
-        ch.serial_debug_output = true;
+        ch.description = "Left Rudder";
+        ch.serial_debug_output = false;
         ch.ichannel_enabled = true;
         ch.ichannel = zIdx(2);              // Human channel 2
         ch.serial_port_out = 7;
@@ -330,7 +330,7 @@ void loadSettings() {
     }
 
     {
-        auto& ch = settings.ochannel[zIdx(3)];
+        auto& ch = settings.ochannel[2];
         ch.enabled = true;
         ch.description = "Left Twist";
         ch.serial_debug_output = true;
@@ -338,18 +338,18 @@ void loadSettings() {
         ch.ichannel = zIdx(3);              // Human channel 3
         ch.serial_port_out = 7;
         ch.maestro_id = 1;
-        ch.maestro_ch = 3;                  // Maestro starts at Channel 0 too
+        ch.maestro_ch = 2;                  // Maestro starts at Channel 0 too
     }
     
     {
         auto& ch = settings.ochannel[4];    // We'll probably actually call this Channel 0 on the Webpage
         ch.enabled = true;
-        ch.description = "Elevator";
+        ch.description = "Right Elevator";
         //ch.us_min = 496;
         //ch.us_max = 2496;
         ch.serial_debug_output = true;
         ch.ichannel_enabled = true;
-        ch.ichannel = zIdx(4);              // Human channel 1
+        ch.ichannel = zIdx(4);              // Human channel 4
         ch.serial_port_out = 7;
         ch.maestro_id = 1;
         ch.maestro_ch = 4;                  // Maestro starts at Channel 0 too
@@ -358,7 +358,7 @@ void loadSettings() {
     {
         auto& ch = settings.ochannel[5];
         ch.enabled = true;
-        ch.description = "Aileron";
+        ch.description = "Right Aileron";
         ch.serial_debug_output = true;
         ch.ichannel_enabled = true;
         ch.ichannel = zIdx(5);              // Human channel 2
