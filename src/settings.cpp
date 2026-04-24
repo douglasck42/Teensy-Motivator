@@ -12,6 +12,32 @@ void resetSettingsDefaults() {
     settings = Settings(); // resets to struct defaults
 }
 
+// Channel Functions Definitions
+const iFunctionMap IFUNCTION_MAP[] = {
+    {"kyberpad",      iChannelFunction::KYBERPAD},
+    {"kyberpad_page", iChannelFunction::KYBERPAD_PAGE},
+    {"volume",        iChannelFunction::VOLUME},
+    {"servo_direct",  iChannelFunction::SERVO_DIRECT},
+};
+iChannelFunction iLookupFunction(const String& name) {
+    for (const auto& entry : IFUNCTION_MAP) {
+        if (name == entry.name) return entry.function;
+    }
+    return iChannelFunction::NONE;
+}
+
+const oFunctionMap OFUNCTION_MAP[] = {
+    {"servo_direct",  oChannelFunction::SERVO_DIRECT},
+};
+oChannelFunction oLookupFunction(const String& name) {
+    for (const auto& entry : OFUNCTION_MAP) {
+        if (name == entry.name) return entry.function;
+    }
+    return oChannelFunction::NONE;
+}
+
+void printSettings();
+
 // -------------------- LOAD --------------------
 void loadSettings() {
     Serial.println("Settings: loadSettings()");
@@ -21,41 +47,120 @@ void loadSettings() {
 
     settings.system.debug_io_mapping = true;
 
-    Serial.println("Configuring KyberPad settings...");
-    // Human Channel 1, SBUS Channel 1 (0-indexed in code)
-    settings.channel[zIdx(1)].enabled = true;
-    settings.channel[zIdx(1)].description = "Ch1";
-    settings.channel[zIdx(1)].short_description = "Ch1";
-    settings.channel[zIdx(1)].sbus_abs_minmax = false;
-    settings.channel[zIdx(1)].maestro_min = 496;
-    settings.channel[zIdx(1)].maestro_max = 2496;
+    Serial.println("Configuring Input Channels");
 
-    // Human Channel 2, SBUS Channel 2 (0-indexed in code)
-    settings.channel[zIdx(2)].enabled = true;
-    settings.channel[zIdx(2)].description = "Ch2";
-    settings.channel[zIdx(2)].short_description = "Ch2";
-    settings.channel[zIdx(1)].sbus_abs_minmax = false;
-    settings.channel[zIdx(2)].maestro_min = 496;
-    settings.channel[zIdx(2)].maestro_max = 2496;
+    {
+        auto& ch = settings.ichannel[zIdx(1)];
+        ch.enabled = true;
+        ch.description = "Throttle";
+        ch.sbus_abs_minmax = false;
+        ch.us_min = 496;
+        ch.us_max = 2496;
+        ch.serial_debug_output = false;
+    }
 
-    Serial.println("Configuring KyberPad settings...");
+    {
+        auto& ch = settings.ichannel[zIdx(2)];
+        ch.enabled = true;
+        ch.description = "Rudder";
+        ch.sbus_abs_minmax = false;
+        ch.us_min = 496;
+        ch.us_max = 2496;
+        ch.serial_debug_output = false;
+    }
+
+    {
+        auto& ch = settings.ichannel[zIdx(3)];
+        ch.enabled = true;
+        ch.description = "Left Twist";
+    }
+
+    {
+        auto& ch = settings.ichannel[zIdx(4)];
+        ch.enabled = true;
+        ch.description = "Elevator";
+    }
+    {
+        auto& ch = settings.ichannel[zIdx(5)];
+        ch.enabled = true;
+        ch.description = "Aileron";
+    }
+    {
+        auto& ch = settings.ichannel[zIdx(6)];
+        ch.enabled = true;
+        ch.description = "Right Twist";
+    }
+    {
+        auto& ch = settings.ichannel[zIdx(7)];
+        ch.enabled = true;
+        ch.description = "SB 3 Position Switch";
+    }
+    {
+        auto& ch = settings.ichannel[zIdx(8)];
+        ch.enabled = true;
+        ch.description = "SF 2 Position Switch";
+    }
+
+    {
+        auto& ch = settings.ichannel[zIdx(9)];
+        ch.enabled = false;
+        ch.description = "Unused";
+    }
+    {
+        auto& ch = settings.ichannel[zIdx(10)];
+        ch.enabled = false;
+        ch.description = "Unused";
+    }
+    {
+        auto& ch = settings.ichannel[zIdx(11)];
+        ch.enabled = false;
+        ch.description = "Unused";
+    }
+    {
+        auto& ch = settings.ichannel[zIdx(12)];
+        ch.enabled = false;
+        ch.description = "Unused";
+    }
+    {
+        auto& ch = settings.ichannel[zIdx(13)];
+        ch.enabled = false;
+        ch.description = "Unused";
+    }
+    {
+        auto& ch = settings.ichannel[zIdx(14)];
+        ch.enabled = true;
+        ch.description = "Slider Left";
+    }
+    {
+        auto& ch = settings.ichannel[zIdx(15)];
+        ch.enabled = true;
+        ch.description = "Slider Right";
+    }
+
+    Serial.println("Configuring Input Channels: KyberPad and volume");
     // Human Channel 22, SBUS Channel 21 (0-indexed in code), is the volume control, which is mapped to a continuous range of volume levels from 0 to 30.
-    settings.channel[zIdx(22)].enabled = true;
-    settings.channel[zIdx(22)].description = "Volume";
-    settings.channel[zIdx(22)].short_description = "Vol";
-    settings.channel[zIdx(22)].volume_channel = true;
+    {
+        auto& ch = settings.ichannel[zIdx(22)];
+        ch.enabled = true;
+        ch.description = "Volume Pot 2 Right Dial";
+        ch.channelFunction = iChannelFunction::VOLUME;
+    }
 
     // Human Channel 23, SBUS Channel 22 (0-indexed in code), is the KyberPad page selector, which uses the same SBUS range as volume control but is mapped to discrete page states instead of a continuous volume level.
-    settings.channel[zIdx(23)].enabled = true;
-    settings.channel[zIdx(23)].description = "Kyperpad Page Toggle";
-    settings.channel[zIdx(23)].short_description = "kPg";
-    settings.channel[zIdx(23)].kyberpad_page_channel = true;
+    {
+        auto& ch = settings.ichannel[zIdx(23)];
+        ch.enabled = true;
+        ch.description = "Kyperpad Page SA";
+        ch.channelFunction = iChannelFunction::KYBERPAD_PAGE;
+    }
 
     // Human Channel 24, SBUS Channel 23 (0-indexed in code), is the KyberPad software buttons themselves
-    settings.channel[zIdx(24)].enabled = true;
-    settings.channel[zIdx(24)].description = "Kyperpad Software Buttons";
-    settings.channel[zIdx(24)].short_description = "kSb";
-    settings.channel[zIdx(24)].kyberpad_channel = true;
+    {
+        auto& ch = settings.ichannel[zIdx(24)];
+        ch.enabled = true;
+        ch.description = "Kyperpad Buttons";
+        ch.channelFunction = iChannelFunction::KYBERPAD;
+    }
 
     Serial.println("Configuring KyberPad Button Channels...");
     //settings.Kyperpadbuttonvalues[0].sbus_value = 172;   // No buttons pressed value
@@ -196,7 +301,89 @@ void loadSettings() {
     // Page 3, Row 3, Column 4
     // Page 3, Row 3, Column 5
 
+    Serial.println("Configuring Output Channels");
 
+    {
+        auto& ch = settings.ochannel[0];    // We'll probably actually call this Channel 0 on the Webpage
+        ch.enabled = true;
+        ch.description = "Throttle";
+        ch.us_min = 496;
+        ch.us_max = 2496;
+        ch.serial_debug_output = true;
+        ch.ichannel_enabled = true;
+        ch.ichannel = zIdx(1);              // Human channel 1
+        ch.serial_port_out = 7;
+        ch.maestro_id = 1;
+        ch.maestro_ch = 0;                  // Maestro starts at Channel 0 too
+    }
+
+    {
+        auto& ch = settings.ochannel[1];
+        ch.enabled = true;
+        ch.description = "Rudder";
+        ch.serial_debug_output = true;
+        ch.ichannel_enabled = true;
+        ch.ichannel = zIdx(2);              // Human channel 2
+        ch.serial_port_out = 7;
+        ch.maestro_id = 1;
+        ch.maestro_ch = 1;                  // Maestro starts at Channel 0 too
+    }
+
+    {
+        auto& ch = settings.ochannel[zIdx(3)];
+        ch.enabled = true;
+        ch.description = "Left Twist";
+        ch.serial_debug_output = true;
+        ch.ichannel_enabled = true;
+        ch.ichannel = zIdx(3);              // Human channel 3
+        ch.serial_port_out = 7;
+        ch.maestro_id = 1;
+        ch.maestro_ch = 3;                  // Maestro starts at Channel 0 too
+    }
+    
+    {
+        auto& ch = settings.ochannel[4];    // We'll probably actually call this Channel 0 on the Webpage
+        ch.enabled = true;
+        ch.description = "Elevator";
+        //ch.us_min = 496;
+        //ch.us_max = 2496;
+        ch.serial_debug_output = true;
+        ch.ichannel_enabled = true;
+        ch.ichannel = zIdx(4);              // Human channel 1
+        ch.serial_port_out = 7;
+        ch.maestro_id = 1;
+        ch.maestro_ch = 4;                  // Maestro starts at Channel 0 too
+    }
+
+    {
+        auto& ch = settings.ochannel[5];
+        ch.enabled = true;
+        ch.description = "Aileron";
+        ch.serial_debug_output = true;
+        ch.ichannel_enabled = true;
+        ch.ichannel = zIdx(5);              // Human channel 2
+        ch.serial_port_out = 7;
+        ch.maestro_id = 1;
+        ch.maestro_ch = 5;                  // Maestro starts at Channel 0 too
+    }
+
+    {
+        auto& ch = settings.ochannel[6];
+        ch.enabled = true;
+        ch.description = "Right Twist";
+        ch.serial_debug_output = true;
+        ch.ichannel_enabled = true;
+        ch.ichannel = zIdx(6);              // Human channel 3
+        ch.serial_port_out = 7;
+        ch.maestro_id = 1;
+        ch.maestro_ch = 6;                  // Maestro starts at Channel 0 too
+    }
+    
+    printSettings();
+
+}
+
+void printSettings() {
     Serial.println("KyberPad Buttons:");
     for (uint8_t page = 0; page < settings.kyberpad.pages; page++) {
         for (int row = 0; row < settings.kyberpad.rows; row++) {
@@ -210,12 +397,53 @@ void loadSettings() {
         }
     }
 
-    Serial.println("KyberPad Channels:");
-    for (uint8_t i = 0; i < settings.system.num_channels; i++) {
-        if (settings.channel[i].enabled) {
-            Serial.printf("  Channel %d: %s\n", i + 1, settings.channel[i].description.c_str());
+    Serial.println("Input Channels:");
+    Serial.println("  Ch  Description               µs Min  µs Max  sbus Min  sbus Max");
+    Serial.println("  --  -----------------------   ------  ------  --------  --------");
+    for (uint8_t current_channel = 0; current_channel < settings.system.num_ichannels; current_channel++) {
+        auto& ch = settings.ichannel[current_channel];
+        uint16_t us_min = 0;
+        uint16_t us_max = 0;
+        uint16_t sbus_min = 0;
+        uint16_t sbus_max = 0;
+        String description = "[DISABLED]";
+        if (ch.enabled) {
+            us_min = usGetMin(CH_IN, current_channel);
+            us_max = usGetMax(CH_IN, current_channel);
+            sbus_min = sbusGetMin(current_channel);
+            sbus_max = sbusGetMax(current_channel);
+            description = ch.description.c_str();
+        }
+        Serial.printf("  %-3d %-24s  %-6d  %-6d  %-8d  %-8d\n",
+            current_channel + 1,
+            description.c_str(),
+            us_min,
+            us_max,
+            sbus_min,
+            sbus_max
+            );
+    }   
+
+
+    Serial.println("Output Channels:");
+    Serial.println("  Ch  Description               I-CH  µs Min  µs Max  Serial    M-ID  M-CH");
+    Serial.println("  --  -----------------------   ----  ------  ------  --------  ----  ----");
+    for (uint8_t channel = 0; channel < settings.system.num_ochannels; channel++) {
+        auto& ch = settings.ochannel[channel];
+        if (ch.enabled) {
+            Serial.printf("  %-3d %-24s  %-4d  %-6d  %-6d  Serial %-1d  %-4d  %-4d\n",
+                channel,
+                ch.description.c_str(),
+                ch.ichannel + 1,
+                usGetMin(CH_OUT, channel),
+                usGetMax(CH_OUT, channel),
+                ch.serial_port_out,
+                ch.maestro_id,
+                ch.maestro_ch
+                );
         }
     }   
+
 }
 
 // -------------------- SAVE --------------------
@@ -223,42 +451,67 @@ void saveSettings() {
     Serial.println("Settings: saveSettings() not yet implemented!");
 }
 
+// sbus minimum value, considering per-channel and system-wide defaults
+// only used on input channels
 uint16_t sbusGetMin(uint8_t channel) {
-    if (settings.channel[channel].sbus_min > 0) {
-        return settings.channel[channel].sbus_min;                  // return the configured min
-    } else if (settings.channel[channel].sbus_abs_minmax) {    // if True use the system-wide absolute min/max
-        return settings.system.sbus_abs_min;
-    } else {                                                     // Return the system-wide standard default values
-        return settings.system.sbus_standard_min;
-    }
+    auto& ch = settings.ichannel[channel];
+    if (ch.sbus_min > 0)      return ch.sbus_min;
+    if (ch.sbus_abs_minmax)   return settings.system.sbus_abs_min;
+    return settings.system.sbus_standard_min;
 }
 
+// sbus maximum value, considering per-channel and system-wide defaults
+// only used on input channels
 uint16_t sbusGetMax(uint8_t channel) {
-    if (settings.channel[channel].sbus_max > 0) {
-        return settings.channel[channel].sbus_max;                  // return the configured min
-    } else if (settings.channel[channel].sbus_abs_minmax) {    // if True use the system-wide absolute min/max
-        return settings.system.sbus_abs_max;
-    } else {                                                     // Return the system-wide standard default values
-        return settings.system.sbus_standard_max;
+    auto& ch = settings.ichannel[channel];
+    if (ch.sbus_max > 0)      return ch.sbus_max;
+    if (ch.sbus_abs_minmax)   return settings.system.sbus_abs_max;
+    return settings.system.sbus_standard_max;
+}
+
+// µs minimum value, considering per-channel and system-wide defaults
+// used on input and output channels
+uint16_t usGetMin(ChannelType type, uint8_t channel) {
+    if (type == ChannelType::iCHANNEL) {
+        auto& ch = settings.ichannel[channel];
+        if (ch.us_min > 0)        return ch.us_min;
+        if (ch.us_abs_minmax)     return settings.system.us_abs_min;
+        return settings.system.us_standard_min;
+    } else {
+        auto& ch = settings.ochannel[channel];
+        if (ch.us_min > 0)        return ch.us_min;
+        if (ch.us_abs_minmax)     return settings.system.us_abs_min;
+        return settings.system.us_standard_min;
     }
 }
 
-uint16_t maestroGetMin(uint8_t channel) {
-    if (settings.channel[channel].maestro_min > 0) {
-        return settings.channel[channel].maestro_min;                  // return the configured min
-    } else if (settings.channel[channel].maestro_abs_minmax) {    // if True use the system-wide absolute min/max
-        return settings.system.maestro_abs_min;
-    } else {                                                     // Return the system-wide standard default values
-        return settings.system.maestro_standard_min;
+// µs maximum value, considering per-channel and system-wide defaults
+// used on input and output channels
+uint16_t usGetMax(ChannelType type, uint8_t channel) {
+    if (type == ChannelType::iCHANNEL) {
+        auto& ch = settings.ichannel[channel];
+        if (ch.us_max > 0)        return ch.us_max;
+        if (ch.us_abs_minmax)     return settings.system.us_abs_max;
+        return settings.system.us_standard_max;
+    } else {
+        auto& ch = settings.ochannel[channel];
+        if (ch.us_max > 0)        return ch.us_max;
+        if (ch.us_abs_minmax)     return settings.system.us_abs_max;
+        return settings.system.us_standard_max;
     }
 }
 
-uint16_t maestroGetMax(uint8_t channel) {
-    if (settings.channel[channel].maestro_max > 0) {
-        return settings.channel[channel].maestro_max;                  // return the configured min
-    } else if (settings.channel[channel].maestro_abs_minmax) {    // if True use the system-wide absolute min/max
-        return settings.system.maestro_abs_max;
-    } else {                                                     // Return the system-wide standard default values
-        return settings.system.maestro_standard_max;
+// µs maximum value, considering per-channel and system-wide defaults
+// used on input and output channels
+void printChannel(ChannelType type, uint8_t channel) {
+    if (type == ChannelType::iCHANNEL) {
+        auto& ch = settings.ichannel[channel];
+        uint8_t us_percent = map(ch.us_value, usGetMin(type, channel), usGetMax(type, channel), 0, 100);
+        uint8_t sbus_percent = map(ch.sbus_value, sbusGetMin(channel), sbusGetMax(channel), 0, 100);
+        Serial.printf("Input Ch %d: %dµs (%d%%) sbus=%d (%d%%)\n", channel + 1, ch.us_value, us_percent, ch.sbus_value, sbus_percent);
+    } else {
+        auto& ch = settings.ochannel[channel];
+        uint8_t us_percent = map(ch.us_value, usGetMin(type, channel), usGetMax(type, channel), 0, 100);
+        Serial.printf("Output Ch %d: %dµs (%d%%)\n", channel + 1, ch.us_value, us_percent);
     }
 }

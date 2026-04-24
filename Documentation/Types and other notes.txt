@@ -1,0 +1,7 @@
+
+µs  microseconds
+
+int8_t / uint8_t: -128 to 127 / 0 to 255
+int16_t / uint16_t: -32,768 to 32,767 / 0 to 65,535
+int32_t / uint32_t: -2.1B to 2.1B / 0 to 4.2B
+int64_t / uint64_t: -9.2E18 to 9.2E18 / 0 to 18.4E18 

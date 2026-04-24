@@ -3,7 +3,8 @@
 
 
 void ioKyberpadButtonExecute(uint8_t page, uint8_t row, uint8_t column) {
-    Settings::KyberpadButton button = settings.kyberpadbuttons[page][row][column];
+    auto& button = settings.kyberpadbuttons[page][row][column];
+    // Settings::KyberpadButton button = settings.kyberpadbuttons[page][row][column];       // og, don't do this. saving for reference since I'm a c++ noob
     if (button.kyberpad_stop) {
         Serial.printf("KyberPad: STOP Page %d Row %d Column %d\n", page + 1, row + 1, column + 1);
         dfpStop(); // Stop any currently playing audio to prevent overlapping audio files when changing pages or pressing buttons that are set to stop further processing of button inputs
@@ -32,40 +33,45 @@ void ioKyberpadButtonExecute(uint8_t page, uint8_t row, uint8_t column) {
 
     Serial.printf("KyberPad: Executing Button on Page %d Row %d Column %d - Playing Audio File %d\n", page + 1, row + 1, column + 1, button.audio_file_current);
     dfpPlay(button.audio_file_current); // Play the selected audio file for this button
-    button.audio_file_current++;
-    settings.kyberpadbuttons[page][row][column].audio_file_current = button.audio_file_current; // Update the current audio file for this button in the settings
+    button.audio_file_current++; // Update the current audio file for this button in the settings
+}
+
+boolean withinJitter(uint16_t value, uint16_t target_value, uint16_t jitter) {
+    if (value >= target_value - jitter && value <= target_value + jitter) return true;
+    return false;
 }
 
 void ioKyberpadPage(uint8_t channel) {
-    //Serial.printf("kyberpadPage: set to %d\n", settings.channel[channel].sbus_value);
-    if (settings.channel[channel].sbus_value >= settings.kyberpad.page_0 - settings.kyberpad.jitter && settings.channel[channel].sbus_value <= settings.kyberpad.page_0 + settings.kyberpad.jitter) {
-        if (settings.kyberpad.page != settings.kyberpad.page_0) {
+    auto& ch = settings.ichannel[channel];
+
+    //Serial.printf("kyberpadPage: set to %d\n", settings.ichannel[channel].sbus_value);
+    //if (ch.sbus_value >= settings.kyberpad.page_0 - settings.kyberpad.jitter && ch.sbus_value <= settings.kyberpad.page_0 + settings.kyberpad.jitter) {
+    if (withinJitter(ch.sbus_value, settings.system.toggle_3_sbus_min, settings.system.sbus_jitter)) {
+        if (settings.kyberpad.page != 0) {
             Serial.println("KyberPad: Page 1");
-            settings.kyberpad.page = settings.kyberpad.page_0;
-            settings.kyberpad.page_human = 1;
+            settings.kyberpad.page = 0;
         }
-    } else if (settings.channel[channel].sbus_value >= settings.kyberpad.page_1 - settings.kyberpad.jitter && settings.channel[channel].sbus_value <= settings.kyberpad.page_1 + settings.kyberpad.jitter) {
-        if (settings.kyberpad.page != settings.kyberpad.page_1) {
+    } else if (withinJitter(ch.sbus_value, settings.system.toggle_3_sbus_mid, settings.system.sbus_jitter)) {
+        if (settings.kyberpad.page != 1) {
             Serial.println("KyberPad: Page 2");
-            settings.kyberpad.page = settings.kyberpad.page_1;
-            settings.kyberpad.page_human = 2;
+            settings.kyberpad.page = 1;
         }
-    } else if (settings.channel[channel].sbus_value >= settings.kyberpad.page_2 - settings.kyberpad.jitter && settings.channel[channel].sbus_value <= settings.kyberpad.page_2 + settings.kyberpad.jitter) {
-        if (settings.kyberpad.page != settings.kyberpad.page_2) {
+    } else if (withinJitter(ch.sbus_value, settings.system.toggle_3_sbus_max, settings.system.sbus_jitter)) {
+        if (settings.kyberpad.page != 2) {
             Serial.println("KyberPad: Page 3");
-            settings.kyberpad.page = settings.kyberpad.page_2;
-            settings.kyberpad.page_human = 3;
+            settings.kyberpad.page = 2;
         }
     } else {
-        Serial.println("KyberPad: Channel " + String(channel + 1) + " Invalid page value: " + String(settings.channel[channel].sbus_value));
+        Serial.println("KyberPad: Channel " + String(channel + 1) + " Invalid page value: " + String(ch.sbus_value));
     }
 }
 
 void ioKyberpadButtons(uint8_t channel, unsigned long now) {
     static uint32_t millis_lastKyberDebounce = 0;
+    auto& ch = settings.ichannel[channel];
 
     // Null value for the KyberPad, do nothing and get out of here quickly
-    if (settings.channel[channel].sbus_value >= settings.kyberpad.sbus_value_null_min && settings.channel[channel].sbus_value <= settings.kyberpad.sbus_value_null_max) {
+    if (withinJitter(ch.sbus_value, settings.kyberpad.sbus_value_null, settings.system.sbus_jitter)) {
         return; 
     }
 
@@ -80,25 +86,23 @@ void ioKyberpadButtons(uint8_t channel, unsigned long now) {
 
     uint8_t kyber_button_index = -1;
     for (uint8_t button_index = 0; button_index <= settings.kyberpad.button_count; button_index++) {
-        uint16_t sbus_min = settings.Kyperpadbuttonvalues[button_index].sbus_value - settings.kyberpad.jitter;
-        uint16_t sbus_max = settings.Kyperpadbuttonvalues[button_index].sbus_value + settings.kyberpad.jitter;
-        if (settings.channel[channel].sbus_value >= sbus_min && settings.channel[channel].sbus_value <= sbus_max) {
+        auto& button = settings.Kyperpadbuttonvalues[button_index];
+        if (withinJitter(ch.sbus_value, button.sbus_value, settings.system.sbus_jitter)) {
             kyber_button_index = button_index;
-            uint8_t page = settings.kyberpad.page_human - 1;
             uint8_t row = button_index / 5;
             uint8_t column = button_index % 5;
             if (settings.system.debug_io_mapping) {
-                Serial.printf("KyberPad: Page %d Row %d Column %d Pressed\n", page + 1, row + 1, column + 1);
+                Serial.printf("KyberPad: Page %d Row %d Column %d Pressed\n", settings.kyberpad.page + 1, row + 1, column + 1);
             }
             break; // Exit the loop once we've found the matching button value
         }
     }
 
     if (kyber_button_index == -1) {
-        Serial.println("KyberPad: No button detected with SBUS value: " + String(settings.channel[channel].sbus_value));
+        Serial.println("KyberPad: No button detected with SBUS value: " + String(ch.sbus_value));
         return; // Exit the function if no button was detected
     }
 
-    ioKyberpadButtonExecute(settings.kyberpad.page_human - 1, kyber_button_index / 5, kyber_button_index % 5); // Execute the button action based on the current page and the detected button index
+    ioKyberpadButtonExecute(settings.kyberpad.page, kyber_button_index / 5, kyber_button_index % 5); // Execute the button action based on the current page and the detected button index
 }
 

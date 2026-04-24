@@ -22,13 +22,14 @@ void Maestro::writeCommand(Stream& serial, uint8_t device, uint8_t command, cons
 //
 //    writeCommand(serial, device, 0x04, data, 3);
 //}
-void Maestro::setTarget(Stream& serial, uint8_t device, uint8_t channel, uint16_t target) {
+void Maestro::setTarget(Stream& serial, uint8_t device, uint8_t channel, uint16_t target_us_value) {
+    uint16_t target_quarter_us_value = target_us_value * 4;     // Pololu Maestro is quartered µs (x4) sized units
     serial.write(0xAA);               // Pololu protocol start byte
     serial.write(device);             // Device number (e.g. 12)
     serial.write(0x04);               // Set Target command
     serial.write(channel);            // Servo channel
-    serial.write(target & 0x7F);      // Low 7 bits of target
-    serial.write((target >> 7) & 0x7F); // High 7 bits of target
+    serial.write(target_quarter_us_value & 0x7F);      // Low 7 bits of target
+    serial.write((target_quarter_us_value >> 7) & 0x7F); // High 7 bits of target
 }
 
 void Maestro::setSpeed(Stream& serial, uint8_t device, uint8_t channel, uint16_t speed)
