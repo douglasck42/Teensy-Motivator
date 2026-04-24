@@ -64,12 +64,13 @@ void setup() {
 
 
     Serial.print("Initializing Serial Ports");
+    // 57600, 115200 - it's all static right now so
     // Serial2 - Handled by dfp.h and dfp.cpp
     Serial3.begin(115200);
     Serial4.begin(115200);
     Serial5.begin(115200);
     Serial6.begin(115200);
-    Serial7.begin(57600);  // Maestro static for now
+    Serial7.begin(115200);  // Maestro static for now
     // Serial8 - Handled by SBUS
 
     // Enable watchdog (5 second timeout)
@@ -233,7 +234,9 @@ void outputMapping(unsigned long now) {
             auto& ich = settings.ichannel[och.ichannel];
             if (ich.updated) {
                 och.updated = true;
-                och.us_value = ich.us_value;
+                // adjust the relative µs values to match input channel 100% to output channel 100%
+                och.us_value = map(ich.us_value, usGetMin(CH_IN, och.ichannel), usGetMax(CH_IN, och.ichannel), usGetMin(CH_OUT, current_channel), usGetMax(CH_OUT, current_channel));
+
                 ich.updated = false;        // we've processed it, clear it
                 #if outputMappingDebug == 1
                 if (och.serial_debug_output && do_debug) {

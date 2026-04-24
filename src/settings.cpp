@@ -335,6 +335,7 @@ void loadSettings() {
         ch.description = "Left Twist";
         ch.serial_debug_output = true;
         ch.ichannel_enabled = true;
+        ch.us_abs_minmax = true;
         ch.ichannel = zIdx(3);              // Human channel 3
         ch.serial_port_out = 7;
         ch.maestro_id = 1;
