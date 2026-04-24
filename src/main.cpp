@@ -1,11 +1,11 @@
-#define BUILD_VERSION "0.1.4"
+#define BUILD_VERSION "0.2.0"
 #include <Arduino.h>
 //#include <LittleFS.h>
 #include "sbus/sbus_config.h"
 #include "settings.h"
 #include "dfplayer/dfp.h"
 #include "kyberpad/kyberpad.h"
-#include <PololuMaestro.h>
+#include "maestro/maestro.h"
 
 // Watching flags
 #ifndef WATCHDOG_ENABLED
@@ -32,7 +32,7 @@
 
 // Hand off the serial port here - Serial1 = pins 0/1 on Teensy 4.1
 SbusDriverType sbusHandler(&SBUS_SERIAL);
-MiniMaestro maestro(Serial7);  // or whichever serial port
+Maestro maestro;
 
 // Define all functons:
 void inputOutputMapping(uint8_t channel, unsigned long now);
@@ -55,14 +55,22 @@ void setup() {
             delay(100);
         }
     }
+
     Serial.println("Nano Motivator v" BUILD_VERSION ": starting up... (serial required)");
 #else
     delay(2000); // Wait for Serial to be ready but non-blocking
     Serial.println("Nano Motivator v" BUILD_VERSION ": starting up... (serial optional)");
 #endif
 
-    Serial.print("Maestro: Init Serial7");
-    Serial7.begin(57600);
+
+    Serial.print("Initializing Serial Ports");
+    // Serial2 - Handled by dfp.h and dfp.cpp
+    Serial3.begin(115200);
+    Serial4.begin(115200);
+    Serial5.begin(115200);
+    Serial6.begin(115200);
+    Serial7.begin(57600);  // Maestro static for now
+    // Serial8 - Handled by SBUS
 
     // Enable watchdog (5 second timeout)
     #if WATCHDOG_ENABLED
@@ -106,10 +114,17 @@ void setup() {
 
 } // setup()
 
-// Print out a given SBUS Channel (Remember that index 0 is channel 1 in SBUS)
-void printChannel(uint8_t index, int16_t value) {
-    if (settings.system.debug_sbus) {
-        Serial.printf("SBUS: CH%d: %d\n", index + 1, value);
+Stream& getSerialPort(uint8_t port) {
+    switch (port) {
+        case 1: return Serial1;
+        case 2: return Serial2;
+        case 3: return Serial3;
+        case 4: return Serial4;
+        case 5: return Serial5;
+        case 6: return Serial6;
+        case 7: return Serial7;
+        case 8: return Serial8;
+        default: return Serial;  // fallback to USB serial
     }
 }
 
@@ -117,54 +132,128 @@ void printChannel(uint8_t index, int16_t value) {
 void printAllChannels() {
     Serial.print("SBUS: ");
     for (uint8_t i = 0; i < SBUS_CHANNELS; i++) {
-        Serial.printf("CH%d:%d ", i + 1, sbusHandler.channel(i));
+        Serial.printf("Ch%d:%d ", i + 1, sbusHandler.channel(i));
     }
     Serial.println("");
 }
 
-// Read the SBUS values and save them to the settings.channel[] array.
-// If a channel value has changed by more than the defined DEADBAND since the last read, print it out to the serial console and call the inputOutputMapping function to handle any necessary output changes based on the new input value.
-void handleSerialOutput(unsigned long now) {
+uint16_t sbusToMicroseconds(uint8_t channel) {
+    return map(settings.ichannel[channel].sbus_value, sbusGetMin(channel), sbusGetMax(channel), usGetMin(CH_IN, channel), usGetMax(CH_IN, channel));
+}
+
+// Read the SBUS values and save them to the settings.ichannel[] array
+// We don't actually DO anything here except save them (.sbus_value AND .us_value)
+void readSbusInputs(unsigned long now) {
+    static unsigned long millis_lastSerialOuptut = 0;
     for (uint8_t current_channel = 0; current_channel < SBUS_CHANNELS; current_channel++) {
         int16_t current_value = sbusHandler.channel(current_channel);
         
-        if (settings.system.debug_sbus) {
-            if (abs(current_value - settings.channel[current_channel].sbus_value) > settings.channel[current_channel].print_jitter) {
-                printChannel(current_channel, current_value);
-            }
-        }
-
         current_value = constrain(current_value, sbusGetMin(current_channel), sbusGetMax(current_channel));
-        if (settings.channel[current_channel].sbus_value != current_value) {
-            settings.channel[current_channel].sbus_value = current_value;
-            inputOutputMapping(current_channel, now);
+        auto& ch = settings.ichannel[current_channel];
+
+        if (ch.sbus_value != current_value) {
+            ch.updated = true;      // Downstream functions should ACT on this value
+            ch.sbus_value = current_value;
+            ch.us_value = sbusToMicroseconds(current_channel);
+        }
+        if (ch.serial_debug_output && (now - millis_lastSerialOuptut >= settings.system.per_channel_serial_output_throttle)) {
+            printChannel(CH_IN, current_channel);
+        }
+    }
+    if (now - millis_lastSerialOuptut >= settings.system.per_channel_serial_output_throttle) {
+        millis_lastSerialOuptut = now;
+    }
+}
+
+//
+void inputFunctions(unsigned long now) {
+    for (uint8_t current_channel = 0; current_channel < SBUS_CHANNELS; current_channel++) {
+        auto& ch = settings.ichannel[current_channel];
+        if (ch.updated) {
+                 
+            switch (ch.channelFunction) {
+                case iChannelFunction::KYBERPAD:
+                    ch.updated = false;     // We're calling the function, turn this off now
+                    ioKyberpadButtons(current_channel, now);
+                    break;
+                case iChannelFunction::KYBERPAD_PAGE:
+                    ch.updated = false;     // We're calling the function, turn this off now
+                    ioKyberpadPage(current_channel);
+                    break;
+                case iChannelFunction::VOLUME:
+                    ch.updated = false;     // We're calling the function, turn this off now
+                    ioVolume(current_channel);
+                    break;
+                default: break;
+            }
         }
     }
 }
 
+// consider the output channels and make things happen
+void sendOuputs(unsigned long now) {
+    static unsigned long millis_output = now;
+    bool do_debug = (now - millis_output >= settings.system.per_channel_serial_output_throttle);
+    bool did_debug = false;
+    for (uint8_t current_channel = 0; current_channel < NUM_OUTPUT_CHANNELS; current_channel++) {
+        auto& och = settings.ochannel[current_channel];
+        if (!och.enabled || !och.updated) continue;
+        och.updated = false;        // we're processing the channel now, clear this
+
+        // splash of debug output
+        if (och.serial_debug_output && do_debug) {
+            ioPrintChannel(current_channel, och.ichannel);
+            did_debug = true;
+        }
+
+        if (och.serial_port_out > 2 && och.serial_port_out < 9 && och.maestro_id > 0) {
+            maestro.setTarget(getSerialPort(och.serial_port_out), och.maestro_id, och.maestro_ch, och.us_value);
+        }
+    }
+    if (do_debug && did_debug) millis_output = now;
+}
+
 // Handle the processing of Input/Outputs
-void inputOutputMapping(uint8_t channel, unsigned long now) {
+void outputMapping(unsigned long now) {
+    #define outputMappingDebug 0    // Set to 1 to enable the outputMapping debug serial output; developer special
 
-    // Skip processing for this channel if it's not enabled
-    if (!settings.channel[channel].enabled) {
-        return; 
+    #if outputMappingDebug == 1
+    static unsigned long millis_output = now;
+    bool do_debug = (now - millis_output >= settings.system.per_channel_serial_output_throttle);
+    bool did_debug = false;
+    #endif
+
+    for (uint8_t current_channel = 0; current_channel < NUM_OUTPUT_CHANNELS; current_channel++) {
+        auto& och = settings.ochannel[current_channel];
+
+        // Skip processing for this channel if it's not enabled
+        if (!och.enabled) continue; 
+
+        if (och.ichannel_enabled) {
+            auto& ich = settings.ichannel[och.ichannel];
+            if (ich.updated) {
+                och.updated = true;
+                och.us_value = ich.us_value;
+                ich.updated = false;        // we've processed it, clear it
+                #if outputMappingDebug == 1
+                if (och.serial_debug_output && do_debug) {
+                    ioPrintChannel(current_channel, och.ichannel);
+                    did_debug = true;
+                }
+                #endif
+            }
+        }
     }
 
-    // Map the volume control channel to the DFPlayer volume
-    if (settings.channel[channel].volume_channel) {
-        ioVolume(channel);
-    // Map KyberPad button channels to the ioKyberpadButtons function (The Software-defined Screen)
-    } else if (settings.channel[channel].kyberpad_channel) {
-        ioKyberpadButtons(channel, now);
-    // Map KyberPad page selector channel to the ioKyberpadPage function (Two or Three way toggle)
-    } else if (settings.channel[channel].kyberpad_page_channel) {
-        ioKyberpadPage(channel);
-    }
+    #if outputMappingDebug == 1
+    if (do_debug && did_debug) millis_output = now;
+    #endif
+
 }
 
 void ioVolume(uint8_t channel) {
     // Map the SBUS value to a volume level between 0 and 30
-    int8_t volume = map(settings.channel[channel].sbus_value, settings.audio.sbus_min, settings.audio.sbus_max, settings.audio.min, settings.audio.max);
+    int8_t volume = map(settings.ichannel[channel].us_value, usGetMin(CH_IN, channel), usGetMax(CH_IN, channel), settings.audio.min, settings.audio.max);
     volume = constrain(volume, settings.audio.min, settings.audio.max);
     if (volume != settings.audio.volume) {
         dfpVolume(volume);
@@ -176,16 +265,16 @@ void ioVolume(uint8_t channel) {
 
 // ========================= LOOP =========================
 void loop() {
+    unsigned long now = millis();
 
     // timers, these get set to current millis() at various points in the code to manage timing of different functions and features
-    static unsigned long millis_lastSbusRead = 0;
-    static unsigned long millis_lastPrintAll = 0;
-    static unsigned long millis_lastHeartbeat = 0;
-    static unsigned long millis_lastSbusWarn = 0; // tracks last time we emitted a late warning
-    static unsigned long millis_maestro = 0; //
-    static uint16_t maestro_position = 6000; //
+    static unsigned long millis_lastSbusRead = now;
+    static unsigned long millis_lastPrintAll = now;
+    static unsigned long millis_lastHeartbeat = now;
+    static unsigned long millis_lastSbusWarn = now; // tracks last time we emitted a late warning
+    //static unsigned long millis_maestro = 0; //
+    //static uint16_t maestro_position = 6000; //
 
-    unsigned long now = millis();
 
     // watchdog reset to prevent system hangs, especially important if the SD card is missing or there's an issue with the DFPlayer that could cause blocking calls
     #if WATCHDOG_ENABLED
@@ -218,22 +307,23 @@ void loop() {
         // Update the timer and read the sbus
         millis_lastSbusRead = now;
         if (sbusHandler.read()) {
-            handleSerialOutput(now);
+            readSbusInputs(now);
             if (sbusHandler.failsafe())  Serial.println("SBUS: ** FAILSAFE **");
             if (sbusHandler.lostFrame()) Serial.println("SBUS: ** LOST FRAME **");
         }
 
-        uint8_t channel = 1;
-        uint16_t qus_min = maestroGetMin(channel) * 4;
-        uint16_t qus_max = maestroGetMax(channel) * 4;
+        inputFunctions(now);        // Handling of predefined input functions (like kyberpad)
+        outputMapping(now);         // Create maps of user outputs
+        // run programmatic automation/scriptings tools
+        sendOuputs(now);            // write the serial output queues
 
-        maestro_position = map(settings.channel[channel].sbus_value, sbusGetMin(channel), sbusGetMax(channel), qus_min, qus_max);
-        maestro_position = constrain(maestro_position, qus_min, qus_max);
-        maestro.setTarget(0, maestro_position);
-        if (now - millis_maestro >= 1500) {
-            millis_maestro = now;
-            Serial.printf("Channel 2 SBUS %d Maestro %d\n", settings.channel[1].sbus_value, maestro_position);
-        }
+        //uint8_t maestro_id = 1;
+        //uint8_t channel = 0;
+        //maestro.setTarget(Serial7, maestro_id, channel, settings.ichannel[channel].us_value);
+        //if (now - millis_maestro >= 1500) {
+        //    millis_maestro = now;
+        //    Serial.printf("Channel 2 SBUS %d Maestro %dµs\n", settings.ichannel[1].sbus_value, settings.ichannel[channel].us_value);
+        //}
     }
 
 }
