@@ -1,6 +1,6 @@
 #include "settings.h"
 #include <LittleFS.h>
-//#include <ArduinoJson.h>
+
 #define zIdx(x) ((x) - 1)
 
 Settings settings;
@@ -15,7 +15,7 @@ void resetSettingsDefaults() {
 // -------------------- LOAD --------------------
 void loadSettings() {
     Serial.println("Settings: loadSettings()");
-    settings.system.debug_sbus = true;
+    settings.system.debug_sbus = false;
     Serial.printf("  Default volume: %d\n", settings.audio.volume);
     Serial.printf("  Debug SBUS: %s\n", settings.system.debug_sbus ? "ON" : "OFF");
 

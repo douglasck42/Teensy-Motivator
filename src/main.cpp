@@ -5,7 +5,7 @@
 #include "settings.h"
 #include "dfplayer/dfp.h"
 #include "kyberpad/kyberpad.h"
-#include <PololuMaestro.h>
+#include "maestro/maestro.h"
 
 // Watching flags
 #ifndef WATCHDOG_ENABLED
@@ -32,7 +32,7 @@
 
 // Hand off the serial port here - Serial1 = pins 0/1 on Teensy 4.1
 SbusDriverType sbusHandler(&SBUS_SERIAL);
-MiniMaestro maestro(Serial7);  // or whichever serial port
+Maestro maestro;
 
 // Define all functons:
 void inputOutputMapping(uint8_t channel, unsigned long now);
@@ -55,14 +55,22 @@ void setup() {
             delay(100);
         }
     }
+
     Serial.println("Nano Motivator v" BUILD_VERSION ": starting up... (serial required)");
 #else
     delay(2000); // Wait for Serial to be ready but non-blocking
     Serial.println("Nano Motivator v" BUILD_VERSION ": starting up... (serial optional)");
 #endif
 
-    Serial.print("Maestro: Init Serial7");
-    Serial7.begin(57600);
+
+    Serial.print("Initializing Serial Ports");
+    // Serial2 - Handled by dfp.h and dfp.cpp
+    Serial3.begin(115200);
+    Serial4.begin(115200);
+    Serial5.begin(115200);
+    Serial6.begin(115200);
+    Serial7.begin(57600);  // Maestro static for now
+    // Serial8 - Handled by SBUS
 
     // Enable watchdog (5 second timeout)
     #if WATCHDOG_ENABLED
@@ -223,13 +231,14 @@ void loop() {
             if (sbusHandler.lostFrame()) Serial.println("SBUS: ** LOST FRAME **");
         }
 
-        uint8_t channel = 1;
+        uint8_t maestro_id = 1;
+        uint8_t channel = 0;
         uint16_t qus_min = maestroGetMin(channel) * 4;
         uint16_t qus_max = maestroGetMax(channel) * 4;
 
         maestro_position = map(settings.channel[channel].sbus_value, sbusGetMin(channel), sbusGetMax(channel), qus_min, qus_max);
         maestro_position = constrain(maestro_position, qus_min, qus_max);
-        maestro.setTarget(0, maestro_position);
+        maestro.setTarget(Serial7, maestro_id, channel, maestro_position);
         if (now - millis_maestro >= 1500) {
             millis_maestro = now;
             Serial.printf("Channel 2 SBUS %d Maestro %d\n", settings.channel[1].sbus_value, maestro_position);
