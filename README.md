@@ -9,12 +9,12 @@ normal input/output maps for the purposes of automation.
     * Pololu D36V50F5 5v Voltage Regulator (accepting 5.5-50v DC input)
     * An available PCB Board simplifying the mounting of all of this (Hardware v1.0)
 * Control System - Optional - `Teensy Scomp Link` Repository
-    * Adafruit Sparkle Motion ESP32 Arduino
+    * Adafruit Sparkle Mini ESP32 Arduino
     * Attached via Serial Port to the Teensy 4.1
     * Provides 2 banks of WS2812b or 5050 LEDs
     * Provides Wireless Control - both a Web Interface and remote triggers via ESP-NOW
 * Remote System - Optional - `Teensy Scomp Relay` Repository
-    * Adafruit Sparkle Motion ESP32 Arduino
+    * Adafruit Sparkle Mini ESP32 Arduino
     * Provides 2 banks of WS2812b or 5050 LEDs
     * Listens for ESP-NOW Triggers to run LED animations
 * KyberPad

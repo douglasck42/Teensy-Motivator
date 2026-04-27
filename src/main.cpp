@@ -56,10 +56,10 @@ void setup() {
         }
     }
 
-    Serial.println("Nano Motivator v" BUILD_VERSION ": starting up... (serial required)");
+    Serial.println("Teensy Motivator v" BUILD_VERSION ": starting up... (serial required)");
 #else
     delay(2000); // Wait for Serial to be ready but non-blocking
-    Serial.println("Nano Motivator v" BUILD_VERSION ": starting up... (serial optional)");
+    Serial.println("Teensy Motivator v" BUILD_VERSION ": starting up... (serial optional)");
 #endif
 
 
@@ -111,7 +111,7 @@ void setup() {
     Serial.printf("DFPlayer: Volume set to %d of %d\n", settings.audio.initial, settings.audio.max);
     settings.audio.volume = settings.audio.initial; // Update the settings with the new volume level
 
-    Serial.println("Nano Motivator now motivating! (setup complete)");
+    Serial.println("Teensy Motivator now motivating! (setup complete)");
 
 } // setup()
 
@@ -286,7 +286,7 @@ void loop() {
 
     // Heartbeat
     if (now - millis_lastHeartbeat >= HEARTBEAT_INTERVAL_MS) {
-        Serial.println("Heartbeat: Nano Motivator alive");
+        Serial.println("Heartbeat: Teensy Motivator alive");
         millis_lastHeartbeat = now;
     }
     if (now - millis_lastPrintAll >= PRINT_ALL_INTERVAL_MS) {

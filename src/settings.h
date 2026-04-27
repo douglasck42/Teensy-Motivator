@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include "json/JsonStorage.h"
 
 #define NUM_INPUT_CHANNELS 24     // SBUS may have 16 or 24, we don't really care here which
 #define NUM_OUTPUT_CHANNELS 48    // Maximum number of Output channels, currently a uint8_t so 255 is THE maximum
