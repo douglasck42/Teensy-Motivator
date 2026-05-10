@@ -56,20 +56,21 @@ void setup() {
         }
     }
 
-    Serial.println("Nano Motivator v" BUILD_VERSION ": starting up... (serial required)");
+    Serial.println("Teensy Motivator v" BUILD_VERSION ": starting up... (serial required)");
 #else
     delay(2000); // Wait for Serial to be ready but non-blocking
-    Serial.println("Nano Motivator v" BUILD_VERSION ": starting up... (serial optional)");
+    Serial.println("Teensy Motivator v" BUILD_VERSION ": starting up... (serial optional)");
 #endif
 
 
     Serial.print("Initializing Serial Ports");
+    // 57600, 115200 - it's all static right now so
     // Serial2 - Handled by dfp.h and dfp.cpp
     Serial3.begin(115200);
     Serial4.begin(115200);
     Serial5.begin(115200);
     Serial6.begin(115200);
-    Serial7.begin(57600);  // Maestro static for now
+    Serial7.begin(115200);  // Maestro static for now
     // Serial8 - Handled by SBUS
 
     // Enable watchdog (5 second timeout)
@@ -110,7 +111,7 @@ void setup() {
     Serial.printf("DFPlayer: Volume set to %d of %d\n", settings.audio.initial, settings.audio.max);
     settings.audio.volume = settings.audio.initial; // Update the settings with the new volume level
 
-    Serial.println("Nano Motivator now motivating! (setup complete)");
+    Serial.println("Teensy Motivator now motivating! (setup complete)");
 
 } // setup()
 
@@ -233,7 +234,9 @@ void outputMapping(unsigned long now) {
             auto& ich = settings.ichannel[och.ichannel];
             if (ich.updated) {
                 och.updated = true;
-                och.us_value = ich.us_value;
+                // adjust the relative µs values to match input channel 100% to output channel 100%
+                och.us_value = map(ich.us_value, usGetMin(CH_IN, och.ichannel), usGetMax(CH_IN, och.ichannel), usGetMin(CH_OUT, current_channel), usGetMax(CH_OUT, current_channel));
+
                 ich.updated = false;        // we've processed it, clear it
                 #if outputMappingDebug == 1
                 if (och.serial_debug_output && do_debug) {
@@ -283,7 +286,7 @@ void loop() {
 
     // Heartbeat
     if (now - millis_lastHeartbeat >= HEARTBEAT_INTERVAL_MS) {
-        Serial.println("Heartbeat: Nano Motivator alive");
+        Serial.println("Heartbeat: Teensy Motivator alive");
         millis_lastHeartbeat = now;
     }
     if (now - millis_lastPrintAll >= PRINT_ALL_INTERVAL_MS) {

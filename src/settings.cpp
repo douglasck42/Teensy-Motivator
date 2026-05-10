@@ -333,8 +333,9 @@ void loadSettings() {
         auto& ch = settings.ochannel[2];
         ch.enabled = true;
         ch.description = "Left Twist";
-        ch.serial_debug_output = true;
+        ch.serial_debug_output = false;
         ch.ichannel_enabled = true;
+        ch.us_abs_minmax = true;
         ch.ichannel = zIdx(3);              // Human channel 3
         ch.serial_port_out = 7;
         ch.maestro_id = 1;
@@ -347,7 +348,7 @@ void loadSettings() {
         ch.description = "Right Elevator";
         //ch.us_min = 496;
         //ch.us_max = 2496;
-        ch.serial_debug_output = true;
+        ch.serial_debug_output = false;
         ch.ichannel_enabled = true;
         ch.ichannel = zIdx(4);              // Human channel 4
         ch.serial_port_out = 7;
@@ -359,7 +360,7 @@ void loadSettings() {
         auto& ch = settings.ochannel[5];
         ch.enabled = true;
         ch.description = "Right Aileron";
-        ch.serial_debug_output = true;
+        ch.serial_debug_output = false;
         ch.ichannel_enabled = true;
         ch.ichannel = zIdx(5);              // Human channel 2
         ch.serial_port_out = 7;
@@ -371,7 +372,7 @@ void loadSettings() {
         auto& ch = settings.ochannel[6];
         ch.enabled = true;
         ch.description = "Right Twist";
-        ch.serial_debug_output = true;
+        ch.serial_debug_output = false;
         ch.ichannel_enabled = true;
         ch.ichannel = zIdx(6);              // Human channel 3
         ch.serial_port_out = 7;
