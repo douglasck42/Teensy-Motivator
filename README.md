@@ -2,7 +2,7 @@
 Teensy 4.1 Based Droid Control. This code coveres the primary Teensy 4.1 system which it's primary job is converting inputs to outputs, trigging programmatic automation of events, triggering MP3s and LED sequences, and even override 
 normal input/output maps for the purposes of automation.
 
-[Teensy 4.1 Overview](Documentation/teensy_overview.png)]
+![Teensy 4.1 Overview](Documentation/teensy_overview.png)
 
 ## System Architecture
 * Core System - This `Teensy Motivator` Repository
