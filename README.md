@@ -101,6 +101,6 @@ This project includes third-party libraries, including SBUS from Bolder Flight S
 Use at your own risk. No warranty. Verify designs before manufacturing.
 
 Authors Note:
-I'm inspired by the opennes of the "droid building" community - the sharing and freely publishing complex designs and the work effort to arrive at those. I don't expect this project to be as "off-the-shelf" as other niche products with closed ecosystems (they are needed), but I wanted something more open, free, and extensible. This is that effort. I started droid building with B2EMO, so I will limit my thanks to the names of individuals who have been attached to that effort: Michael Baddeley, David Ferreria, Tim Hebel for the 3d designs and plans, and Jason Charlton's Youtube build videos.
+I'm inspired by the openness of the "droid building" community - the sharing and freely publishing complex designs and the work effort to arrive at those. I don't expect this project to be as "off-the-shelf" as other niche products with closed ecosystems (they are needed), but I wanted something more open, free, and extensible. This is that effort. I started droid building with B2EMO, so I will limit my thanks to the names of individuals who have been attached to that effort: Michael Baddeley, David Ferreria, Tim Hebel for the 3d designs and plans, and Jason Charlton's Youtube build videos.
 
 © 2026 Douglas Kempthorne (douglas@kempthorne.com)
