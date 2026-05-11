@@ -1,3 +1,8 @@
+// Copyright (c) 2026 Douglas Kempthorne (douglas@kempthorne.com)
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Heavy AI here, I've been switching between Claude, ChatGPT and various local LLMs at the time and don't recall which
+// I'd presume Heavily derived from the bolderflight sbus library, MIT licensed: https://github.com/bolderflight/sbus
+
 #include "sbus16_native.h"
 #include "elapsedMillis.h"
 

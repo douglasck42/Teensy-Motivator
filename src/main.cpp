@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Douglas Kempthorne (douglas@kempthorne.com)
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #define BUILD_VERSION "0.2.0"
 #include <Arduino.h>
 //#include <LittleFS.h>
@@ -6,6 +9,7 @@
 #include "dfplayer/dfp.h"
 #include "kyberpad/kyberpad.h"
 #include "maestro/maestro.h"
+#include "json/JsonStorage.h"
 
 // Watching flags
 #ifndef WATCHDOG_ENABLED
@@ -46,6 +50,8 @@ const uint8_t SBUS_INTERVAL_MS = 15; // Slightly over 14ms SBUS frame rate, you 
 constexpr uint8_t SBUS_LATE_WARNING_MS = 5;   // warn if we're this many ms late
 constexpr uint16_t SBUS_WARN_COOLDOWN_MS   = 1000; // suppress repeated warnings for this long
 
+void loadSettingsWrapper();
+
 // ========================= SETUP =========================
 void setup() {
     Serial.begin(115200);
@@ -79,7 +85,8 @@ void setup() {
     esp_task_wdt_add(NULL); // add current thread
     #endif
 
-    loadSettings();
+    loadSettingsDefaults();
+    loadSettingsWrapper();
 
     //if (!LittleFS.begin(true)) {
     //    Serial.println("LittleFS: mount failed");
@@ -115,6 +122,27 @@ void setup() {
 
 } // setup()
 
+void loadSettingsWrapper() {
+    // Initialize SD card
+    if (!JsonStorage::begin(BUILTIN_SDCARD)) {
+        Serial.println("setup_load_wrapper(): Teensy 4.1 SD init failed");
+        // cfg remains at compiled defaults — safe to continue
+    }
+
+    // Load settings — scoped block so JsonDocument is freed immediately after
+    {
+        if (settingsLoad("/config.json", settings)) {
+            Serial.println("Settings loaded");
+        } else {
+            Serial.println("No config found, using defaults");
+            // Optionally write defaults out on first boot:
+            settingsSave("/config.json", settings);
+        }
+    }
+
+    settingsSave("/config_backup.json", settings); // Backup the loaded (or default) settings for debugging purposes
+    
+}
 Stream& getSerialPort(uint8_t port) {
     switch (port) {
         case 1: return Serial1;
