@@ -1,3 +1,10 @@
+// Copyright (c) 2026 Douglas Kempthorne (douglas@kempthorne.com)
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Heavy AI here, I've been switching between Claude, ChatGPT and various local LLMs at the time and don't recall which
+// I'd presume Heavily derived from the bolderflight sbus library, MIT licensed: https://github.com/bolderflight/sbus
+// I'd also credit Tim Hebel's sbus-24 contributions found here: https://github.com/Eebel/MyActuatorRMDX68V3_SBUS24
+//      I can't say for sure that credit IS his, but that's the SBUS-24 packet implementation that WAS based on the Bolderflight SBUS-16 code
+
 #include "sbus24_native.h"
 #include "elapsedMillis.h"
 

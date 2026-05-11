@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Douglas Kempthorne (douglas@kempthorne.com)
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #define BUILD_VERSION "0.2.0"
 #include <Arduino.h>
 //#include <LittleFS.h>
@@ -137,7 +140,8 @@ void loadSettingsWrapper() {
         }
     }
 
-    // ... rest of setup
+    settingsSave("/config_backup.json", settings); // Backup the loaded (or default) settings for debugging purposes
+    
 }
 Stream& getSerialPort(uint8_t port) {
     switch (port) {

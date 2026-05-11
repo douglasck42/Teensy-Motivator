@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Douglas Kempthorne (douglas@kempthorne.com)
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Honestly all written by AI here, I've been switching between Claude, ChatGPT and various local LLMs at the time and don't recall which
+
 #pragma once
 
 #include <Arduino.h>

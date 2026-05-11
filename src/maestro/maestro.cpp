@@ -1,6 +1,8 @@
-#include "Maestro.h"
+// Copyright (c) 2026 Douglas Kempthorne (douglas@kempthorne.com)
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Honestly all written by AI here, I've been switching between Claude, ChatGPT and various local LLMs at the time and don't recall which
 
-// Honestly all written by AI here
+#include "Maestro.h"
 
 void Maestro::writeCommand(Stream& serial, uint8_t device, uint8_t command, const uint8_t* data, uint8_t length)
 {

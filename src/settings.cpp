@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Douglas Kempthorne (douglas@kempthorne.com)
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "settings.h"
 #include <LittleFS.h>
 
@@ -453,6 +456,7 @@ void printSettings() {
 //  Delegates all field-level work to each struct's to_json().
 // ============================================================
 bool settingsSave(const char *path, const Settings &cfg, bool pretty) {
+    Serial.println("Saving settings to SD...");
     JsonDocument doc;
 
     cfg.audio.to_json(doc["audio"].to<JsonObject>());
@@ -502,6 +506,7 @@ bool settingsSave(const char *path, const Settings &cfg, bool pretty) {
 //  Delegates all field-level work to each struct's from_json().
 // ============================================================
 bool settingsLoad(const char *path, Settings &cfg) {
+    Serial.println("Loading settings from SD...");
     JsonDocument doc;
     if (!JsonStorage::read(path, doc)) return false;
 
