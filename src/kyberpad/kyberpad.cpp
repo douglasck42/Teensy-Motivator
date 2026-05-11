@@ -86,7 +86,7 @@ void ioKyberpadButtons(uint8_t channel, unsigned long now) {
 
     uint8_t kyber_button_index = -1;
     for (uint8_t button_index = 0; button_index <= settings.kyberpad.button_count; button_index++) {
-        auto& button = settings.Kyperpadbuttonvalues[button_index];
+        auto& button = settings.kyperpadbuttonvalues[button_index];
         if (withinJitter(ch.sbus_value, button.sbus_value, settings.system.sbus_jitter)) {
             kyber_button_index = button_index;
             uint8_t row = button_index / 5;

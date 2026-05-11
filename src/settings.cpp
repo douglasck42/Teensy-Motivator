@@ -39,8 +39,8 @@ oChannelFunction oLookupFunction(const String& name) {
 void printSettings();
 
 // -------------------- LOAD --------------------
-void loadSettings() {
-    Serial.println("Settings: loadSettings()");
+void loadSettingsDefaults() {
+    Serial.println("Settings: loadSettingsDefaults()");
     settings.system.debug_sbus = false;
     Serial.printf("  Default volume: %d\n", settings.audio.volume);
     Serial.printf("  Debug SBUS: %s\n", settings.system.debug_sbus ? "ON" : "OFF");
@@ -163,22 +163,22 @@ void loadSettings() {
     }
 
     Serial.println("Configuring KyberPad Button Channels...");
-    //settings.Kyperpadbuttonvalues[0].sbus_value = 172;   // No buttons pressed value
-    settings.Kyperpadbuttonvalues[0].sbus_value = 274;   // Row 1 Column 1
-    settings.Kyperpadbuttonvalues[1].sbus_value = 376;   // Row 1 Column 2
-    settings.Kyperpadbuttonvalues[2].sbus_value = 478;   // Row 1 Column 3
-    settings.Kyperpadbuttonvalues[3].sbus_value = 580;   // Row 1 Column 4
-    settings.Kyperpadbuttonvalues[4].sbus_value = 682;   // Row 1 Column 5
-    settings.Kyperpadbuttonvalues[5].sbus_value = 784;   // Row 2 Column 1
-    settings.Kyperpadbuttonvalues[6].sbus_value = 886;   // Row 2 Column 2
-    settings.Kyperpadbuttonvalues[7].sbus_value = 988;   // Row 2 Column 3
-    settings.Kyperpadbuttonvalues[8].sbus_value = 1090;  // Row 2 Column 4
-    settings.Kyperpadbuttonvalues[9].sbus_value = 1192; // Row 2 Column 5
-    settings.Kyperpadbuttonvalues[10].sbus_value = 1294; // Row 3 Column 1
-    settings.Kyperpadbuttonvalues[11].sbus_value = 1396; // Row 3 Column 2
-    settings.Kyperpadbuttonvalues[12].sbus_value = 1498; // Row 3 Column 3
-    settings.Kyperpadbuttonvalues[13].sbus_value = 1600; // Row 3 Column 4
-    settings.Kyperpadbuttonvalues[14].sbus_value = 1702; // Row 3 Column 5
+    //settings.kyperpadbuttonvalues[0].sbus_value = 172;   // No buttons pressed value
+    settings.kyperpadbuttonvalues[0].sbus_value = 274;   // Row 1 Column 1
+    settings.kyperpadbuttonvalues[1].sbus_value = 376;   // Row 1 Column 2
+    settings.kyperpadbuttonvalues[2].sbus_value = 478;   // Row 1 Column 3
+    settings.kyperpadbuttonvalues[3].sbus_value = 580;   // Row 1 Column 4
+    settings.kyperpadbuttonvalues[4].sbus_value = 682;   // Row 1 Column 5
+    settings.kyperpadbuttonvalues[5].sbus_value = 784;   // Row 2 Column 1
+    settings.kyperpadbuttonvalues[6].sbus_value = 886;   // Row 2 Column 2
+    settings.kyperpadbuttonvalues[7].sbus_value = 988;   // Row 2 Column 3
+    settings.kyperpadbuttonvalues[8].sbus_value = 1090;  // Row 2 Column 4
+    settings.kyperpadbuttonvalues[9].sbus_value = 1192; // Row 2 Column 5
+    settings.kyperpadbuttonvalues[10].sbus_value = 1294; // Row 3 Column 1
+    settings.kyperpadbuttonvalues[11].sbus_value = 1396; // Row 3 Column 2
+    settings.kyperpadbuttonvalues[12].sbus_value = 1498; // Row 3 Column 3
+    settings.kyperpadbuttonvalues[13].sbus_value = 1600; // Row 3 Column 4
+    settings.kyperpadbuttonvalues[14].sbus_value = 1702; // Row 3 Column 5
 
 
     Serial.println("Configuring KyberPad STOP Buttons...");
@@ -447,9 +447,126 @@ void printSettings() {
 
 }
 
-// -------------------- SAVE --------------------
-void saveSettings() {
-    Serial.println("Settings: saveSettings() not yet implemented!");
+// ============================================================
+//  settingsSave
+//  Serializes the full Settings struct to a JSON file on SD.
+//  Delegates all field-level work to each struct's to_json().
+// ============================================================
+bool settingsSave(const char *path, const Settings &cfg, bool pretty) {
+    JsonDocument doc;
+
+    cfg.audio.to_json(doc["audio"].to<JsonObject>());
+    cfg.system.to_json(doc["system"].to<JsonObject>());
+
+    // Input channels
+    JsonArray ichs = doc["ichannels"].to<JsonArray>();
+    for (uint8_t i = 0; i < NUM_INPUT_CHANNELS; i++) {
+        cfg.ichannel[i].to_json(ichs.add<JsonObject>());
+    }
+
+    // Output channels
+    JsonArray ochs = doc["ochannels"].to<JsonArray>();
+    for (uint8_t i = 0; i < NUM_OUTPUT_CHANNELS; i++) {
+        cfg.ochannel[i].to_json(ochs.add<JsonObject>());
+    }
+
+    // Kyberpad config
+    cfg.kyberpad.to_json(doc["kyberpad"].to<JsonObject>());
+
+    // Kyberpad raw SBUS values — flat array, index 0 = null/no-press
+    JsonArray bvals = doc["kyberpad_sbus_values"].to<JsonArray>();
+    for (uint8_t i = 0; i < BUTTON_COUNT; i++) {
+        bvals.add(cfg.kyperpadbuttonvalues[i].sbus_value);
+    }
+
+    // Kyberpad button definitions [page][row][col]
+    JsonArray pages = doc["kyberpad_buttons"].to<JsonArray>();
+    for (uint8_t p = 0; p < PAGES; p++) {
+        JsonArray rows = pages.add<JsonArray>();
+        for (uint8_t r = 0; r < ROWS; r++) {
+            JsonArray cols = rows.add<JsonArray>();
+            for (uint8_t c = 0; c < COLUMNS; c++) {
+                cfg.kyberpadbuttons[p][r][c].to_json(cols.add<JsonObject>());
+            }
+        }
+    }
+
+    return JsonStorage::write(path, doc, pretty);
+}
+
+
+// ============================================================
+//  settingsLoad
+//  Deserializes a JSON file from SD into the Settings struct.
+//  Missing keys leave struct defaults untouched (safe partial load).
+//  Delegates all field-level work to each struct's from_json().
+// ============================================================
+bool settingsLoad(const char *path, Settings &cfg) {
+    JsonDocument doc;
+    if (!JsonStorage::read(path, doc)) return false;
+
+    if (doc["audio"].is<JsonObjectConst>())
+        cfg.audio.from_json(doc["audio"].as<JsonObjectConst>());
+
+    if (doc["system"].is<JsonObjectConst>())
+        cfg.system.from_json(doc["system"].as<JsonObjectConst>());
+
+    // Input channels
+    if (doc["ichannels"].is<JsonArrayConst>()) {
+        JsonArrayConst ichs = doc["ichannels"].as<JsonArrayConst>();
+        uint8_t i = 0;
+        for (JsonObjectConst ch : ichs) {
+            if (i >= NUM_INPUT_CHANNELS) break;
+            cfg.ichannel[i++].from_json(ch);
+        }
+    }
+
+    // Output channels
+    if (doc["ochannels"].is<JsonArrayConst>()) {
+        JsonArrayConst ochs = doc["ochannels"].as<JsonArrayConst>();
+        uint8_t i = 0;
+        for (JsonObjectConst ch : ochs) {
+            if (i >= NUM_OUTPUT_CHANNELS) break;
+            cfg.ochannel[i++].from_json(ch);
+        }
+    }
+
+    // Kyberpad config
+    if (doc["kyberpad"].is<JsonObjectConst>())
+        cfg.kyberpad.from_json(doc["kyberpad"].as<JsonObjectConst>());
+
+    // Kyberpad raw SBUS values
+    if (doc["kyberpad_sbus_values"].is<JsonArrayConst>()) {
+        JsonArrayConst bvals = doc["kyberpad_sbus_values"].as<JsonArrayConst>();
+        uint8_t i = 0;
+        for (uint16_t v : bvals) {
+            if (i >= BUTTON_COUNT) break;
+            cfg.kyperpadbuttonvalues[i++].sbus_value = v;
+        }
+    }
+
+    // Kyberpad button definitions [page][row][col]
+    if (doc["kyberpad_buttons"].is<JsonArrayConst>()) {
+        JsonArrayConst pages = doc["kyberpad_buttons"].as<JsonArrayConst>();
+        uint8_t p = 0;
+        for (JsonArrayConst rows : pages) {
+            if (p >= PAGES) break;
+            uint8_t r = 0;
+            for (JsonArrayConst cols : rows) {
+                if (r >= ROWS) break;
+                uint8_t c = 0;
+                for (JsonObjectConst btn : cols) {
+                    if (c >= COLUMNS) break;
+                    cfg.kyberpadbuttons[p][r][c].from_json(btn);
+                    c++;
+                }
+                r++;
+            }
+            p++;
+        }
+    }
+
+    return true;
 }
 
 // sbus minimum value, considering per-channel and system-wide defaults
