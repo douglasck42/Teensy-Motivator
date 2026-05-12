@@ -42,6 +42,7 @@
 #define SCOMP_BAUD_RATE 115200
 #endif
 static unsigned long millis_lastHeartbeat = 0;
+static unsigned long g_last_scomp_ms = 0;
 
 
 // Hand off the serial port here - Serial1 = pins 0/1 on Teensy 4.1
@@ -77,14 +78,14 @@ char* formatUptime(unsigned long ms) {
 }
 
 // ========================= SCOMP =========================
-void onScompMessage(uint8_t msg_type, const uint8_t *payload, uint8_t len, void *) {
+void onScompMessage(uint8_t msg_type, const uint8_t *payload, uint16_t len, void *) {
+    g_last_scomp_ms = millis();
     switch (msg_type) {
         case SCOMP_MSG_HEARTBEAT: {
             static unsigned long millis_lastEspHeartbeat = 0;
-            unsigned long now_hb = millis();
+            unsigned long now_hb = g_last_scomp_ms;
             unsigned long gap = millis_lastEspHeartbeat ? (now_hb - millis_lastEspHeartbeat) : 0;
             millis_lastEspHeartbeat = now_hb;
-            millis_lastHeartbeat = now_hb; // reset our heartbeat timeout timer message, this one is plenty
             if (len >= sizeof(ScompHeartbeat)) {
                 const auto *hb = reinterpret_cast<const ScompHeartbeat *>(payload);
                 Serial.printf("Heartbeat: Teensy UP %s", formatUptime(now_hb));
@@ -194,7 +195,8 @@ void setup() {
 
     Serial.print("Initializing Serial Ports");
     static uint8_t Serial4_tx_buf[256];
-    static uint8_t Serial5_tx_buf[256];
+    static uint8_t Serial5_tx_buf[512];  // scomp TX: headroom for config upload chunks
+    static uint8_t Serial5_rx_buf[512];  // scomp RX: ~3 SBUS cycles of headroom at 115200
     static uint8_t Serial6_tx_buf[256];
     // 57600, 115200 - it's all static right now so
     // Serial2 - Handled by dfp.h and dfp.cpp
@@ -207,6 +209,7 @@ void setup() {
 
     Serial4.addMemoryForWrite(Serial4_tx_buf, sizeof(Serial4_tx_buf));
     Serial5.addMemoryForWrite(Serial5_tx_buf, sizeof(Serial5_tx_buf));
+    Serial5.addMemoryForRead(Serial5_rx_buf,  sizeof(Serial5_rx_buf));
     Serial6.addMemoryForWrite(Serial6_tx_buf, sizeof(Serial6_tx_buf));
 
     scomp.begin(Serial5);
@@ -441,13 +444,16 @@ void loop() {
     scomp.update();
 
     // Heartbeat (USB serial)
-    if (now - millis_lastHeartbeat >= (HEARTBEAT_INTERVAL_MS + HEARTBEAT_INTERVAL_MS)) { // add a little extra time to ensure this doesn't get too close to the Scomp heartbeat, which is on the same timer
-        #if DEBUG_SCOMP_RX
-        Serial.printf("Heartbeat: Teensy UP %s | Scomp DOWN | rx bytes=%lu frames=%lu crc_err=%lu sync_drops=%lu\n",
-                      formatUptime(now), scomp.rxBytes(), scomp.rxFrames(), scomp.rxCrcErrors(), scomp.rxSyncDrops());
-        #else
-        Serial.printf("Heartbeat: Teensy UP %s | Scomp DOWN\n", formatUptime(now));
-        #endif
+    if (now - millis_lastHeartbeat >= HEARTBEAT_INTERVAL_MS) { // add a little extra time to ensure this doesn't get too close to the Scomp heartbeat, which is on the same timer
+        bool scomp_alive = g_last_scomp_ms > 0 && (now - g_last_scomp_ms) < (HEARTBEAT_INTERVAL_MS * 2);
+        if (!scomp_alive) {
+            #if DEBUG_SCOMP_RX
+            Serial.printf("Heartbeat: Teensy UP %s | Scomp DOWN | rx bytes=%lu frames=%lu crc_err=%lu sync_drops=%lu\n",
+                          formatUptime(now), scomp.rxBytes(), scomp.rxFrames(), scomp.rxCrcErrors(), scomp.rxSyncDrops());
+            #else
+            Serial.printf("Heartbeat: Teensy UP %s | Scomp DOWN\n", formatUptime(now));
+            #endif
+        }
         millis_lastHeartbeat = now;
     }
 

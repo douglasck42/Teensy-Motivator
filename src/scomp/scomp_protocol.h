@@ -5,19 +5,20 @@
 // scomp_protocol.h — Wire protocol shared between Teensy 4.1 and ESP32 Scomp Motion.
 // No Arduino or platform dependencies; copy this file as-is to both projects.
 //
-// Frame layout:  [START:1][TYPE:1][LEN:1][PAYLOAD:LEN][CRC8:1][END:1]
-// CRC-8 covers bytes:  TYPE + LEN + PAYLOAD  (Dallas/Maxim, poly 0x8C)
+// Frame layout:  [START:1][TYPE:1][LEN_LO:1][LEN_HI:1][PAYLOAD:LEN][CRC8:1][END:1]
+// CRC-8 covers bytes:  TYPE + LEN_LO + LEN_HI + PAYLOAD  (Dallas/Maxim, poly 0x8C)
+// LEN is little-endian uint16_t, allowing payloads up to 65535 bytes.
 
 #pragma once
 #include <stdint.h>
 
 // ---- Protocol version — bump on any breaking change ----
-#define SCOMP_PROTOCOL_VERSION  1
+#define SCOMP_PROTOCOL_VERSION  2
 
 // ---- Frame constants ----
 #define SCOMP_START        0xAB
 #define SCOMP_END          0xCD
-#define SCOMP_MAX_PAYLOAD  248   // fits comfortably in uint8_t; largest msg is 102 bytes
+#define SCOMP_MAX_PAYLOAD  4096  // uint16_t length field; sized for a full JSON config
 
 // ---- Channel counts (must match settings.h NUM_INPUT/OUTPUT_CHANNELS) ----
 #define SCOMP_IN_CH   24
@@ -125,8 +126,8 @@ typedef struct __attribute__((packed)) {
 // CRC-8  (Dallas/Maxim, polynomial 0x8C reflected)
 // ============================================================
 
-static inline uint8_t scomp_crc8_feed(uint8_t crc, const uint8_t *data, uint8_t len) {
-    for (uint8_t i = 0; i < len; i++) {
+static inline uint8_t scomp_crc8_feed(uint8_t crc, const uint8_t *data, uint16_t len) {
+    for (uint16_t i = 0; i < len; i++) {
         uint8_t b = data[i];
         for (uint8_t bit = 0; bit < 8; bit++) {
             crc = ((crc ^ b) & 1u) ? (uint8_t)((crc >> 1) ^ 0x8Cu) : (uint8_t)(crc >> 1);

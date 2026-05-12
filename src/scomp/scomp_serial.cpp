@@ -37,12 +37,17 @@ void ScompSerial::update() {
 
             case RxState::READ_TYPE:
                 _rx_type  = b;
-                _rx_state = RxState::READ_LEN;
+                _rx_state = RxState::READ_LEN_LO;
                 break;
 
-            case RxState::READ_LEN:
-                _rx_len = b;
-                _rx_pos = 0;
+            case RxState::READ_LEN_LO:
+                _rx_len   = b;               // low byte
+                _rx_state = RxState::READ_LEN_HI;
+                break;
+
+            case RxState::READ_LEN_HI:
+                _rx_len  |= ((uint16_t)b << 8); // high byte
+                _rx_pos   = 0;
                 _rx_state = (_rx_len == 0) ? RxState::READ_CRC : RxState::READ_PAYLOAD;
                 break;
 
@@ -52,9 +57,12 @@ void ScompSerial::update() {
                 break;
 
             case RxState::READ_CRC: {
-                // Validate CRC over [type, len, payload...]
-                uint8_t crc = scomp_crc8_feed(0, &_rx_type, 1);
-                crc         = scomp_crc8_feed(crc, &_rx_len, 1);
+                // Validate CRC over [type, len_lo, len_hi, payload...]
+                uint8_t len_lo = (uint8_t)(_rx_len & 0xFF);
+                uint8_t len_hi = (uint8_t)(_rx_len >> 8);
+                uint8_t crc = scomp_crc8_feed(0,   &_rx_type, 1);
+                crc         = scomp_crc8_feed(crc, &len_lo,   1);
+                crc         = scomp_crc8_feed(crc, &len_hi,   1);
                 crc         = scomp_crc8_feed(crc, _rx_buf, _rx_len);
                 if (b == crc) {
                     _rx_state = RxState::READ_END;
@@ -80,16 +88,20 @@ void ScompSerial::update() {
 // Transmit
 // ============================================================
 
-bool ScompSerial::send(uint8_t msg_type, const void *payload, uint8_t len) {
+bool ScompSerial::send(uint8_t msg_type, const void *payload, uint16_t len) {
     if (!_port) return false;
 
-    uint8_t crc = scomp_crc8_feed(0, &msg_type, 1);
-    crc         = scomp_crc8_feed(crc, &len, 1);
+    uint8_t len_lo = (uint8_t)(len & 0xFF);
+    uint8_t len_hi = (uint8_t)(len >> 8);
+    uint8_t crc = scomp_crc8_feed(0,   &msg_type, 1);
+    crc         = scomp_crc8_feed(crc, &len_lo,   1);
+    crc         = scomp_crc8_feed(crc, &len_hi,   1);
     crc         = scomp_crc8_feed(crc, (const uint8_t *)payload, len);
 
     _port->write(SCOMP_START);
     _port->write(msg_type);
-    _port->write(len);
+    _port->write(len_lo);
+    _port->write(len_hi);
     if (len) _port->write((const uint8_t *)payload, len);
     _port->write(crc);
     _port->write(SCOMP_END);

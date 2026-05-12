@@ -10,7 +10,7 @@
 #include "scomp_protocol.h"
 
 // Callback signature: called once per complete, CRC-valid message received.
-typedef void (*ScompCallback)(uint8_t msg_type, const uint8_t *payload, uint8_t len, void *user_data);
+typedef void (*ScompCallback)(uint8_t msg_type, const uint8_t *payload, uint16_t len, void *user_data);
 
 class ScompSerial {
 public:
@@ -24,7 +24,7 @@ public:
     void onMessage(ScompCallback cb, void *user_data = nullptr);
 
     // ---- Generic sender (all others delegate here) ----
-    bool send(uint8_t msg_type, const void *payload, uint8_t len);
+    bool send(uint8_t msg_type, const void *payload, uint16_t len);
 
     // ---- RX diagnostics ----
     uint32_t rxBytes()      const;
@@ -49,20 +49,21 @@ private:
     enum class RxState : uint8_t {
         WAIT_START,
         READ_TYPE,
-        READ_LEN,
+        READ_LEN_LO,
+        READ_LEN_HI,
         READ_PAYLOAD,
         READ_CRC,
         READ_END,
     };
 
-    Stream          *_port      = nullptr;
-    ScompCallback  _cb        = nullptr;
-    void            *_cb_data   = nullptr;
+    Stream        *_port    = nullptr;
+    ScompCallback  _cb      = nullptr;
+    void          *_cb_data = nullptr;
 
     RxState  _rx_state = RxState::WAIT_START;
     uint8_t  _rx_type  = 0;
-    uint8_t  _rx_len   = 0;
-    uint8_t  _rx_pos   = 0;
+    uint16_t _rx_len   = 0;
+    uint16_t _rx_pos   = 0;
     uint8_t  _rx_buf[SCOMP_MAX_PAYLOAD];
 
     uint32_t _rx_bytes      = 0;
