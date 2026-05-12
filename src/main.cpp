@@ -38,6 +38,9 @@
 #ifndef DEBUG_SCOMP_RX
 #define DEBUG_SCOMP_RX 0
 #endif
+#ifndef SCOMP_BAUD_RATE
+#define SCOMP_BAUD_RATE 115200
+#endif
 static unsigned long millis_lastHeartbeat = 0;
 
 
@@ -84,12 +87,11 @@ void onScompMessage(uint8_t msg_type, const uint8_t *payload, uint8_t len, void 
             millis_lastHeartbeat = now_hb; // reset our heartbeat timeout timer message, this one is plenty
             if (len >= sizeof(ScompHeartbeat)) {
                 const auto *hb = reinterpret_cast<const ScompHeartbeat *>(payload);
-                Serial.printf("Heartbeat: Teensy Motivator alive ");
-                Serial.print(formatUptime(now_hb));
-                Serial.printf("; Scomp ESP32 heartbeat v%u flags=0x%02X gap=%lums uptime=%s\n",
-                              hb->version, hb->flags, gap, formatUptime(hb->uptime_ms));
+                Serial.printf("Heartbeat: Teensy UP %s", formatUptime(now_hb));
+                Serial.printf(" | Scomp UP %s", formatUptime(hb->uptime_ms));
+                Serial.printf(" | v%u flags=0x%02X gap=%lums\n", hb->version, hb->flags, gap);
             } else {
-                Serial.printf("Heartbeat: Teensy Motivator alive %s; Scomp heartbeat (short payload %u bytes)\n", formatUptime(now_hb), len);
+                Serial.printf("Heartbeat: Teensy UP %s | Scomp FAULT | short payload %u bytes\n", formatUptime(now_hb), len);
             }
             break;
         }
@@ -197,8 +199,8 @@ void setup() {
     // 57600, 115200 - it's all static right now so
     // Serial2 - Handled by dfp.h and dfp.cpp
     Serial3.begin(115200);
-    Serial4.begin(57600);
-    Serial5.begin(57600);  // Scomp Motion (ESP32)
+    Serial4.begin(115200);
+    Serial5.begin(SCOMP_BAUD_RATE);  // Scomp Motion (ESP32)
     Serial6.begin(115200);
     Serial7.begin(115200);  // Maestro static for now
     // Serial8 - Handled by SBUS
@@ -439,12 +441,12 @@ void loop() {
     scomp.update();
 
     // Heartbeat (USB serial)
-    if (now - millis_lastHeartbeat >= HEARTBEAT_INTERVAL_MS + 100) { // add a little extra time to ensure this doesn't get too close to the Scomp heartbeat, which is on the same timer
+    if (now - millis_lastHeartbeat >= (HEARTBEAT_INTERVAL_MS + HEARTBEAT_INTERVAL_MS)) { // add a little extra time to ensure this doesn't get too close to the Scomp heartbeat, which is on the same timer
         #if DEBUG_SCOMP_RX
-        Serial.printf("Heartbeat: Teensy Motivator alive %s | SCOMP rx bytes=%lu frames=%lu crc_err=%lu sync_drops=%lu\n",
+        Serial.printf("Heartbeat: Teensy UP %s | Scomp DOWN | rx bytes=%lu frames=%lu crc_err=%lu sync_drops=%lu\n",
                       formatUptime(now), scomp.rxBytes(), scomp.rxFrames(), scomp.rxCrcErrors(), scomp.rxSyncDrops());
         #else
-        Serial.printf("Heartbeat: Teensy Motivator alive (No SCOMP Detected) %s\n", formatUptime(now));
+        Serial.printf("Heartbeat: Teensy UP %s | Scomp DOWN\n", formatUptime(now));
         #endif
         millis_lastHeartbeat = now;
     }
