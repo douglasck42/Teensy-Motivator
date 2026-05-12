@@ -21,3 +21,4 @@ void dfpPrintDetail(uint8_t type, uint16_t value);
 void dfpStop();
 void dfpPlay(uint16_t fileNumber);
 void dfpVolume(uint8_t volume);
+bool dfpIsPlaying();

@@ -10,6 +10,7 @@
 #include "kyberpad/kyberpad.h"
 #include "maestro/maestro.h"
 #include "json/JsonStorage.h"
+#include "scomp/scomp_serial.h"
 
 // Watching flags
 #ifndef WATCHDOG_ENABLED
@@ -24,7 +25,7 @@
 
 // Other timer values
 #ifndef HEARTBEAT_INTERVAL_MS
-#define HEARTBEAT_INTERVAL_MS 60000
+#define HEARTBEAT_INTERVAL_MS 5000
 #endif
 #ifndef PRINT_ALL_INTERVAL_MS
 #define PRINT_ALL_INTERVAL_MS 30000
@@ -34,13 +35,133 @@
 #define WAIT_FOR_SERIAL 0
 #endif
 
+#ifndef DEBUG_SCOMP_RX
+#define DEBUG_SCOMP_RX 0
+#endif
+static unsigned long millis_lastHeartbeat = 0;
+
+
 // Hand off the serial port here - Serial1 = pins 0/1 on Teensy 4.1
 SbusDriverType sbusHandler(&SBUS_SERIAL);
 Maestro maestro;
+ScompSerial scomp;
 
 // Define all functons:
 void inputOutputMapping(uint8_t channel, unsigned long now);
 void ioVolume(uint8_t channel);
+
+char* formatUptime(unsigned long ms) {
+    static char buf[32];
+    unsigned long seconds = ms / 1000;
+    unsigned long minutes = seconds / 60;
+    unsigned long hours   = minutes / 60;
+    unsigned long days    = hours   / 24;
+
+    seconds %= 60;
+    minutes %= 60;
+    hours   %= 24;
+
+    if (days > 0)
+        sprintf(buf, "%lud %02luh %02lum %02lus", days, hours, minutes, seconds);
+    else if (hours > 0)
+        sprintf(buf, "%02luh %02lum %02lus", hours, minutes, seconds);
+    else if (minutes > 0)
+        sprintf(buf, "%02lum %02lus", minutes, seconds);
+    else
+        sprintf(buf, "%02lus", seconds);
+
+    return buf;
+}
+
+// ========================= SCOMP =========================
+void onScompMessage(uint8_t msg_type, const uint8_t *payload, uint8_t len, void *) {
+    switch (msg_type) {
+        case SCOMP_MSG_HEARTBEAT: {
+            static unsigned long millis_lastEspHeartbeat = 0;
+            unsigned long now_hb = millis();
+            unsigned long gap = millis_lastEspHeartbeat ? (now_hb - millis_lastEspHeartbeat) : 0;
+            millis_lastEspHeartbeat = now_hb;
+            millis_lastHeartbeat = now_hb; // reset our heartbeat timeout timer message, this one is plenty
+            if (len >= sizeof(ScompHeartbeat)) {
+                const auto *hb = reinterpret_cast<const ScompHeartbeat *>(payload);
+                Serial.printf("Heartbeat: Teensy Motivator alive ");
+                Serial.print(formatUptime(now_hb));
+                Serial.printf("; Scomp ESP32 heartbeat v%u flags=0x%02X gap=%lums uptime=%s\n",
+                              hb->version, hb->flags, gap, formatUptime(hb->uptime_ms));
+            } else {
+                Serial.printf("Heartbeat: Teensy Motivator alive %s; Scomp heartbeat (short payload %u bytes)\n", formatUptime(now_hb), len);
+            }
+            break;
+        }
+        case SCOMP_MSG_REQUEST_STATE: {
+            if (settings.system.debug) Serial.println("SCOMP: ESP32 requested state dump");
+            // full state will be sent on the next scompSendState() tick
+            break;
+        }
+        case SCOMP_MSG_SET_VOLUME: {
+            if (len < sizeof(ScompSetVolume)) break;
+            const auto *msg = reinterpret_cast<const ScompSetVolume *>(payload);
+            uint8_t vol = constrain(msg->volume, settings.audio.min, settings.audio.max);
+            dfpVolume(vol);
+            settings.audio.volume = vol;
+            if (settings.system.debug) Serial.printf("SCOMP: Set volume → %u\n", vol);
+            break;
+        }
+        case SCOMP_MSG_TRIGGER_AUDIO: {
+            if (len < sizeof(ScompTriggerAudio)) break;
+            const auto *msg = reinterpret_cast<const ScompTriggerAudio *>(payload);
+            dfpPlay(msg->file_number);
+            if (settings.system.debug) Serial.printf("SCOMP: Trigger audio → file %u\n", msg->file_number);
+            break;
+        }
+        case SCOMP_MSG_SET_SETTING: {
+            if (len < sizeof(ScompSetSetting)) break;
+            const auto *msg = reinterpret_cast<const ScompSetSetting *>(payload);
+            if (settings.system.debug) Serial.printf("SCOMP: Set setting key=0x%02X idx=%u val=%u\n",
+                                                      msg->key, msg->index, msg->value.u8);
+            switch (msg->key) {
+                case SCOMP_SETTING_AUDIO_MUTE:
+                    settings.audio.mute = (msg->value.u8 != 0);
+                    if (settings.audio.mute) dfpVolume(0);
+                    else dfpVolume(settings.audio.volume);
+                    break;
+                default: break;
+            }
+            break;
+        }
+        default:
+            Serial.printf("SCOMP: Unknown message type 0x%02X len=%u\n", msg_type, len);
+            break;
+    }
+}
+
+void scompSendState(unsigned long now) {
+    // Input channels
+    ScompInputChannels in_msg = {};
+    for (uint8_t i = 0; i < SCOMP_IN_CH; i++) {
+        in_msg.values[i] = settings.ichannel[i].sbus_value;
+        if (settings.ichannel[i].enabled) in_msg.enabled[i / 8] |= (1u << (i % 8));
+    }
+    scomp.sendInputChannels(in_msg);
+
+    // Output channels
+    ScompOutputChannels out_msg = {};
+    for (uint8_t i = 0; i < SCOMP_OUT_CH; i++) {
+        out_msg.values[i] = settings.ochannel[i].us_value;
+        if (settings.ochannel[i].enabled) out_msg.enabled[i / 8] |= (1u << (i % 8));
+    }
+    scomp.sendOutputChannels(out_msg);
+
+    // Audio state
+    ScompAudioState audio_msg = {};
+    audio_msg.volume = settings.audio.volume;
+    audio_msg.state  = dfpIsPlaying() ? SCOMP_AUDIO_PLAYING : SCOMP_AUDIO_STOPPED;
+    scomp.sendAudioState(audio_msg);
+}
+
+#ifndef SCOMP_SEND_INTERVAL_MS
+#define SCOMP_SEND_INTERVAL_MS 50   // 20 Hz channel updates to ESP32
+#endif
 
 
 // ========================= CONFIG =========================
@@ -70,14 +191,24 @@ void setup() {
 
 
     Serial.print("Initializing Serial Ports");
+    static uint8_t Serial4_tx_buf[256];
+    static uint8_t Serial5_tx_buf[256];
+    static uint8_t Serial6_tx_buf[256];
     // 57600, 115200 - it's all static right now so
     // Serial2 - Handled by dfp.h and dfp.cpp
     Serial3.begin(115200);
-    Serial4.begin(115200);
-    Serial5.begin(115200);
+    Serial4.begin(57600);
+    Serial5.begin(57600);  // Scomp Motion (ESP32)
     Serial6.begin(115200);
     Serial7.begin(115200);  // Maestro static for now
     // Serial8 - Handled by SBUS
+
+    Serial4.addMemoryForWrite(Serial4_tx_buf, sizeof(Serial4_tx_buf));
+    Serial5.addMemoryForWrite(Serial5_tx_buf, sizeof(Serial5_tx_buf));
+    Serial6.addMemoryForWrite(Serial6_tx_buf, sizeof(Serial6_tx_buf));
+
+    scomp.begin(Serial5);
+    scomp.onMessage(onScompMessage);
 
     // Enable watchdog (5 second timeout)
     #if WATCHDOG_ENABLED
@@ -87,15 +218,6 @@ void setup() {
 
     loadSettingsDefaults();
     loadSettingsWrapper();
-
-    //if (!LittleFS.begin(true)) {
-    //    Serial.println("LittleFS: mount failed");
-    //}
-    //if (LittleFS.exists("/config.json")) {
-    //    Serial.println("LittleFS: config.json EXISTS");
-    //} else {
-    //    Serial.println("LittleFS: config.json NOT FOUND");
-    //}
 
 #if SBUS_DRIVER == SBUS_DRIVER_BOLDERFLIGHT
     Serial.println("Driver: Bolderflight SBUS-16");
@@ -299,28 +421,53 @@ void loop() {
     unsigned long now = millis();
 
     // timers, these get set to current millis() at various points in the code to manage timing of different functions and features
-    static unsigned long millis_lastSbusRead = now;
-    static unsigned long millis_lastPrintAll = now;
-    static unsigned long millis_lastHeartbeat = now;
-    static unsigned long millis_lastSbusWarn = now; // tracks last time we emitted a late warning
+    static unsigned long millis_lastSbusRead    = now;
+    static unsigned long millis_lastPrintAll    = now;
+    static unsigned long millis_lastSbusWarn    = now; // tracks last time we emitted a late warning
+    static unsigned long millis_lastScompSend = now;
+    static unsigned long millis_lastScompHeartbeat = now;
+
     //static unsigned long millis_maestro = 0; //
     //static uint16_t maestro_position = 6000; //
-
 
     // watchdog reset to prevent system hangs, especially important if the SD card is missing or there's an issue with the DFPlayer that could cause blocking calls
     #if WATCHDOG_ENABLED
     esp_task_wdt_reset();
     #endif
 
-    // Heartbeat
-    if (now - millis_lastHeartbeat >= HEARTBEAT_INTERVAL_MS) {
-        Serial.println("Heartbeat: Teensy Motivator alive");
+    // Scomp update to read incoming messages and trigger callbacks - this should be called every loop tick to ensure timely processing of incoming Scomp messages from the ESP32
+    scomp.update();
+
+    // Heartbeat (USB serial)
+    if (now - millis_lastHeartbeat >= HEARTBEAT_INTERVAL_MS + 100) { // add a little extra time to ensure this doesn't get too close to the Scomp heartbeat, which is on the same timer
+        #if DEBUG_SCOMP_RX
+        Serial.printf("Heartbeat: Teensy Motivator alive %s | SCOMP rx bytes=%lu frames=%lu crc_err=%lu sync_drops=%lu\n",
+                      formatUptime(now), scomp.rxBytes(), scomp.rxFrames(), scomp.rxCrcErrors(), scomp.rxSyncDrops());
+        #else
+        Serial.printf("Heartbeat: Teensy Motivator alive (No SCOMP Detected) %s\n", formatUptime(now));
+        #endif
         millis_lastHeartbeat = now;
+    }
+
+    // Heartbeat (Scomp)
+    if (now - millis_lastScompHeartbeat >= HEARTBEAT_INTERVAL_MS) {
+        ScompHeartbeat hb = {};
+        hb.version   = SCOMP_PROTOCOL_VERSION;
+        hb.uptime_ms = now;
+        hb.flags     = (sbusHandler.failsafe()  ? SCOMP_FLAG_SBUS_FAILSAFE   : 0)
+                     | (sbusHandler.lostFrame() ? SCOMP_FLAG_SBUS_LOST_FRAME : 0);
+        scomp.sendHeartbeat(hb);
+        millis_lastScompHeartbeat = now;
+    }
+
+    // Periodic state push to ESP32
+    if (now - millis_lastScompSend >= SCOMP_SEND_INTERVAL_MS) {
+        millis_lastScompSend = now;
+        scompSendState(now);
     }
     if (now - millis_lastPrintAll >= PRINT_ALL_INTERVAL_MS) {
         printAllChannels();
         millis_lastPrintAll = now;
-        millis_lastHeartbeat = now; // if we're printing all channels, also reset the heartbeat timer since we know the system is alive and well enough to print out all channel values
     }
 
     // SBUS Input and output handling
@@ -348,13 +495,6 @@ void loop() {
         // run programmatic automation/scriptings tools
         sendOuputs(now);            // write the serial output queues
 
-        //uint8_t maestro_id = 1;
-        //uint8_t channel = 0;
-        //maestro.setTarget(Serial7, maestro_id, channel, settings.ichannel[channel].us_value);
-        //if (now - millis_maestro >= 1500) {
-        //    millis_maestro = now;
-        //    Serial.printf("Channel 2 SBUS %d Maestro %dµs\n", settings.ichannel[1].sbus_value, settings.ichannel[channel].us_value);
-        //}
     }
 
 }
