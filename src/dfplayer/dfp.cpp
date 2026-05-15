@@ -9,7 +9,8 @@
 SoftwareSerial softSerial(DF_RX_PIN, DF_TX_PIN);  // definition
 #endif
 
-DFRobotDFPlayerMini myDFPlayer; 
+DFRobotDFPlayerMini myDFPlayer;
+static bool s_dfp_playing = false;
 
 
 void dfpSetup() {
@@ -135,6 +136,7 @@ void dfpStop() {
     Serial.printf("DFPlayer: Stopping playback\n");
   }
   myDFPlayer.stop(); // Stop any currently playing audio to prevent overlapping audio files when changing pages or pressing buttons that are set to stop further processing of button inputs
+  s_dfp_playing = false;
 }
 
 void dfpPlay(uint16_t fileNumber) {
@@ -142,7 +144,10 @@ void dfpPlay(uint16_t fileNumber) {
     Serial.printf("DFPlayer: Playing file number %d\n", fileNumber);
   }
   myDFPlayer.playMp3Folder(fileNumber); // Play the selected audio file for this button
+  s_dfp_playing = true;
 }
+
+bool dfpIsPlaying() { return s_dfp_playing; }
 
 void dfpVolume(uint8_t volume) {
   if (settings.audio.dfp_debug) {
