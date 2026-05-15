@@ -4,6 +4,8 @@ Serial communication layer between the Teensy 4.1 (Motivator) and the ESP32 (Spa
 The three files in this folder are the complete implementation — copy them as-is to both projects.
 Only the serial port passed to `scomp.begin()` differs between sides.
 
+**These files should be kept in sync between Teensy Motivator and Scomp Repositories**
+
 ## Hardware
 
 | Signal | Teensy 4.1 | ESP32 |

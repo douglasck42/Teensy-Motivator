@@ -3,7 +3,7 @@
 
 #define BUILD_VERSION "0.2.0"
 #include <Arduino.h>
-//#include <LittleFS.h>
+#include "common/common.h"
 #include "sbus/sbus_config.h"
 #include "settings.h"
 #include "dfplayer/dfp.h"
@@ -12,21 +12,7 @@
 #include "json/JsonStorage.h"
 #include "scomp/scomp_serial.h"
 
-// Watching flags
-#ifndef WATCHDOG_ENABLED
-#define WATCHDOG_ENABLED 1
-#endif
-#ifndef WATCHDOG_TIMEOUT_SECONDS
-#define WATCHDOG_TIMEOUT_SECONDS 10
-#endif
-#if WATCHDOG_ENABLED
-#include <esp_task_wdt.h>
-#endif
-
-// Other timer values
-#ifndef HEARTBEAT_INTERVAL_MS
-#define HEARTBEAT_INTERVAL_MS 5000
-#endif
+// ========================= OTHER MIST SETTINGS =========================
 #ifndef PRINT_ALL_INTERVAL_MS
 #define PRINT_ALL_INTERVAL_MS 30000
 #endif
@@ -35,15 +21,11 @@
 #define WAIT_FOR_SERIAL 0
 #endif
 
-#ifndef DEBUG_SCOMP_RX
-#define DEBUG_SCOMP_RX 0
-#endif
-#ifndef SCOMP_BAUD_RATE
-#define SCOMP_BAUD_RATE 115200
-#endif
-static unsigned long millis_lastHeartbeat = 0;
-static unsigned long g_last_scomp_ms = 0;
+// ========================= SCOMP SETTINGS =========================
+static unsigned long scomp_serial_peer_last_heartbeat = 0;
+static boolean scomp_peer_alive = false;
 
+static unsigned long millis_lastHeartbeat = 0;
 
 // Hand off the serial port here - Serial1 = pins 0/1 on Teensy 4.1
 SbusDriverType sbusHandler(&SBUS_SERIAL);
@@ -54,38 +36,15 @@ ScompSerial scomp;
 void inputOutputMapping(uint8_t channel, unsigned long now);
 void ioVolume(uint8_t channel);
 
-char* formatUptime(unsigned long ms) {
-    static char buf[32];
-    unsigned long seconds = ms / 1000;
-    unsigned long minutes = seconds / 60;
-    unsigned long hours   = minutes / 60;
-    unsigned long days    = hours   / 24;
-
-    seconds %= 60;
-    minutes %= 60;
-    hours   %= 24;
-
-    if (days > 0)
-        sprintf(buf, "%lud %02luh %02lum %02lus", days, hours, minutes, seconds);
-    else if (hours > 0)
-        sprintf(buf, "%02luh %02lum %02lus", hours, minutes, seconds);
-    else if (minutes > 0)
-        sprintf(buf, "%02lum %02lus", minutes, seconds);
-    else
-        sprintf(buf, "%02lus", seconds);
-
-    return buf;
-}
 
 // ========================= SCOMP =========================
 void onScompMessage(uint8_t msg_type, const uint8_t *payload, uint16_t len, void *) {
-    g_last_scomp_ms = millis();
     switch (msg_type) {
         case SCOMP_MSG_HEARTBEAT: {
-            static unsigned long millis_lastEspHeartbeat = 0;
-            unsigned long now_hb = g_last_scomp_ms;
-            unsigned long gap = millis_lastEspHeartbeat ? (now_hb - millis_lastEspHeartbeat) : 0;
-            millis_lastEspHeartbeat = now_hb;
+            unsigned long now_hb = millis();
+            unsigned long gap = scomp_serial_peer_last_heartbeat ? (now_hb - scomp_serial_peer_last_heartbeat) : 0;
+            scomp_serial_peer_last_heartbeat = now_hb;
+            scomp_peer_alive = true;
             if (len >= sizeof(ScompHeartbeat)) {
                 const auto *hb = reinterpret_cast<const ScompHeartbeat *>(payload);
                 Serial.printf("Heartbeat: Teensy UP %s", formatUptime(now_hb));
@@ -162,9 +121,6 @@ void scompSendState(unsigned long now) {
     scomp.sendAudioState(audio_msg);
 }
 
-#ifndef SCOMP_SEND_INTERVAL_MS
-#define SCOMP_SEND_INTERVAL_MS 50   // 20 Hz channel updates to ESP32
-#endif
 
 
 // ========================= CONFIG =========================
@@ -432,9 +388,6 @@ void loop() {
     static unsigned long millis_lastScompSend = now;
     static unsigned long millis_lastScompHeartbeat = now;
 
-    //static unsigned long millis_maestro = 0; //
-    //static uint16_t maestro_position = 6000; //
-
     // watchdog reset to prevent system hangs, especially important if the SD card is missing or there's an issue with the DFPlayer that could cause blocking calls
     #if WATCHDOG_ENABLED
     esp_task_wdt_reset();
@@ -443,10 +396,15 @@ void loop() {
     // Scomp update to read incoming messages and trigger callbacks - this should be called every loop tick to ensure timely processing of incoming Scomp messages from the ESP32
     scomp.update();
 
+    // Liveness (Scomp)
+    if (now - scomp_serial_peer_last_heartbeat >= (SCOMP_DEADZONE_MS)) {
+        scomp_peer_alive = false;
+    }
+
     // Heartbeat (USB serial)
     if (now - millis_lastHeartbeat >= HEARTBEAT_INTERVAL_MS) { // add a little extra time to ensure this doesn't get too close to the Scomp heartbeat, which is on the same timer
-        bool scomp_alive = g_last_scomp_ms > 0 && (now - g_last_scomp_ms) < (HEARTBEAT_INTERVAL_MS * 2);
-        if (!scomp_alive) {
+        millis_lastHeartbeat = now;
+        if (!scomp_peer_alive) {
             #if DEBUG_SCOMP_RX
             Serial.printf("Heartbeat: Teensy UP %s | Scomp DOWN | rx bytes=%lu frames=%lu crc_err=%lu sync_drops=%lu\n",
                           formatUptime(now), scomp.rxBytes(), scomp.rxFrames(), scomp.rxCrcErrors(), scomp.rxSyncDrops());
