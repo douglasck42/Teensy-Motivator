@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include "dfp.h"
-#include "settings.h"
+#include "common/settings.h"
 
 #if (defined(ARDUINO_AVR_UNO) || defined(ESP8266))
 SoftwareSerial softSerial(DF_RX_PIN, DF_TX_PIN);  // definition

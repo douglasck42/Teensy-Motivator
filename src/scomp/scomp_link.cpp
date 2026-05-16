@@ -4,7 +4,7 @@
 #include "scomp_link.h"
 
 void ScompLink::begin(Stream &port, uint8_t my_node_flag) {
-    _xfer.begin(port, false);  // false = disable SerialTransfer's own debug printing
+    _xfer.begin(port, true);  // false = disable SerialTransfer's own debug printing
     _my_flag = my_node_flag;
 }
 
@@ -60,6 +60,30 @@ char* formatUptime(unsigned long ms) {
     return buf;
 }
 
+void ScompLink::printHeartbeat() {
+    // Print out heartbeat status in a human-readable format. This is useful for debugging and monitoring the connection status between the local and remote nodes. It shows the uptime of both nodes and how long ago we last heard from the peer.
+    // ESP32 doesn't like formatUptime with printf, so it's been relgated to it's own line
+    uint32_t now = millis();
+    static uint32_t last_print_ms = 0;
+    if (now - last_print_ms < (HEARTBEAT_INTERVAL_MS - 100)) {
+        return; // rate limit to avoid spamming Serial
+    }
+    last_print_ms = now;
+    Serial.printf("[SCOMP] Local Node 0x%02X UP ", SCOMP_FLAG_NODE_LOCAL);
+    Serial.print(formatUptime(now));
+    if (peerAlive()) {
+        Serial.printf(" | Remote Node 0x%02X UP ", _peer_node_flag);
+        Serial.print(formatUptime(_peer_uptime_ms));
+    } else {
+        Serial.printf(" | Remote Node 0x%02X DOWN", _peer_node_flag);
+    }
+    Serial.print(" | gap ");
+    Serial.print(formatUptime(now - _peer_last_ms)); 
+    #if DEBUG_SCOMP_RX
+    Serial.printf(" | frames=%lu errors=%lu", rxFrames(), rxErrors());
+    #endif
+    Serial.print("\n");
+}
 // ============================================================
 // _dispatch() — route a received frame to the right handler
 // ============================================================
@@ -72,16 +96,10 @@ void ScompLink::_dispatch(uint8_t msg_type) {
             ScompHeartbeat hb;
             _xfer.rxObj(hb, off);
             if (hb.node_flag == _my_flag) return;   // loopback guard — discard own echo
-            uint32_t now = millis();
-            uint32_t gap = _peer_last_ms ? (now - _peer_last_ms) : 0;
-            _peer_last_ms = now;
-            Serial.printf("[SCOMP] Local Node 0x%02X UP ", SCOMP_FLAG_NODE_LOCAL);
-            Serial.print(formatUptime(now));
-            Serial.printf(" | Remote Node 0x%02X UP ", hb.node_flag);
-            Serial.print(formatUptime(hb.uptime_ms));
-            Serial.printf(" | gap ");
-            Serial.print(formatUptime(gap));
-            Serial.print("\n");
+            _peer_last_ms   = millis();
+            _peer_node_flag = hb.node_flag;
+            _peer_uptime_ms = hb.uptime_ms;
+            printHeartbeat();
             if (_cb_hb) _cb_hb(hb);
             break;
         }
@@ -106,6 +124,13 @@ void ScompLink::_dispatch(uint8_t msg_type) {
             ScompOutputChannels msg;
             _xfer.rxObj(msg, off);
             if (_cb_out) _cb_out(msg);
+            break;
+        }
+
+        case SCOMP_MSG_STRIP_CONFIG: {
+            ScompStripConfig msg;
+            _xfer.rxObj(msg, off);
+            if (_cb_cfg) _cb_cfg(msg);
             break;
         }
 
@@ -150,6 +175,13 @@ void ScompLink::sendInputChannels(const ScompInputChannels &msg) {
 
 void ScompLink::sendOutputChannels(const ScompOutputChannels &msg) {
     uint8_t msg_type = SCOMP_MSG_OUT_CHANNELS;
+    uint16_t size = _xfer.txObj(msg_type, 0);
+    size = _xfer.txObj(msg, size);
+    _xfer.sendData(size);
+}
+
+void ScompLink::sendStripConfig(const ScompStripConfig &msg) {
+    uint8_t msg_type = SCOMP_MSG_STRIP_CONFIG;
     uint16_t size = _xfer.txObj(msg_type, 0);
     size = _xfer.txObj(msg, size);
     _xfer.sendData(size);

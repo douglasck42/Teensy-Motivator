@@ -3,7 +3,7 @@
 
 #pragma once
 #include <Arduino.h>
-#include "settings.h"
+#include "common/settings.h"
 
 void ioKyberpadButtons(uint8_t channel, unsigned long now) ;
 void ioKyberpadPage(uint8_t channel);

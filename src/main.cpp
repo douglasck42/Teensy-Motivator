@@ -3,9 +3,9 @@
 
 #define BUILD_VERSION "0.2.0"
 #include <Arduino.h>
+#include "common/settings.h"
 #include "common/common.h"
 #include "sbus/sbus_config.h"
-#include "settings.h"
 #include "dfplayer/dfp.h"
 #include "kyberpad/kyberpad.h"
 #include "maestro/maestro.h"
@@ -115,6 +115,7 @@ void setup() {
 
     Serial.println("Teensy Motivator now motivating! (setup complete)");
 
+    print_memory_info();
 } // setup()
 
 void loadSettingsWrapper() {
@@ -310,16 +311,7 @@ void loop() {
     // Heartbeat (USB serial) — reports liveness of both sides
     if (now - millis_lastHeartbeat >= HEARTBEAT_INTERVAL_MS) {
         millis_lastHeartbeat = now;
-        if (!scomp.peerAlive()) {
-            // More serial.prints to get around ESP32 weirdness and keep this code portable
-            Serial.printf("Heartbeat: Local Node 0x%02X UP ", SCOMP_FLAG_NODE_LOCAL);
-            Serial.print(formatUptime(now));
-            Serial.printf(" | Remote Node 0x%02X DOWN", SCOMP_FLAG_NODE_REMOTE);
-            #if DEBUG_SCOMP_RX
-            Serial.printf(" | frames=%lu errors=%lu", scomp.rxFrames(), scomp.rxErrors());
-            #endif
-            Serial.print("\n");
-        }
+        scomp.printHeartbeat();
     }
 
     // Heartbeat (Scomp) — announce ourselves to the peer

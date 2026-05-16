@@ -53,6 +53,7 @@
 #define SCOMP_MSG_LED_TRIGGER  0x02
 #define SCOMP_MSG_IN_CHANNELS  0x03
 #define SCOMP_MSG_OUT_CHANNELS 0x04
+#define SCOMP_MSG_STRIP_CONFIG 0x05
 
 // ============================================================
 // Payload structs — packed, little-endian (ARM + Xtensa both LE)
@@ -78,11 +79,31 @@ struct __attribute__((packed)) ScompOutputChannels {
     uint16_t us[SCOMP_OUT_CH];    // µs values for all output channels
 };
 
+// ---- Strip type indices — must match STRIP_TYPES[] table on the ESP32 side ----
+#define SCOMP_STRIP_GRB_800  0   // WS2812B (most common RGB)
+#define SCOMP_STRIP_RGB_800  1
+#define SCOMP_STRIP_GRBW_800 2   // SK6812 RGBW
+#define SCOMP_STRIP_RGBW_800 3
+#define SCOMP_STRIP_GRB_400  4
+#define SCOMP_STRIP_RGB_400  5
+
+struct __attribute__((packed)) ScompStripConfig {
+    uint16_t strip1_num_leds;
+    uint8_t  strip1_pin;
+    uint8_t  strip1_type_index;  // one of SCOMP_STRIP_* above
+    uint8_t  strip1_brightness;  // 0–255
+    uint16_t strip2_num_leds;
+    uint8_t  strip2_pin;
+    uint8_t  strip2_type_index;
+    uint8_t  strip2_brightness;
+};
+
 // ---- Callback types ----
 typedef void (*ScompHeartbeatCb)  (const ScompHeartbeat &);
 typedef void (*ScompLedTriggerCb) (const ScompLedTrigger &);
 typedef void (*ScompInChannelsCb) (const ScompInputChannels &);
 typedef void (*ScompOutChannelsCb)(const ScompOutputChannels &);
+typedef void (*ScompStripConfigCb)(const ScompStripConfig &);
 
 // ============================================================
 // ScompLink — thin wrapper around SerialTransfer
@@ -105,15 +126,20 @@ public:
     void sendLedTrigger(const ScompLedTrigger &msg);
     void sendInputChannels(const ScompInputChannels &msg);
     void sendOutputChannels(const ScompOutputChannels &msg);
+    void sendStripConfig(const ScompStripConfig &msg);
 
     // ---- Receive callbacks ----
-    void onHeartbeat   (ScompHeartbeatCb   cb) { _cb_hb  = cb; }
-    void onLedTrigger  (ScompLedTriggerCb  cb) { _cb_led = cb; }
+    void onHeartbeat    (ScompHeartbeatCb   cb) { _cb_hb  = cb; }
+    void onLedTrigger   (ScompLedTriggerCb  cb) { _cb_led = cb; }
     void onInputChannels (ScompInChannelsCb  cb) { _cb_in  = cb; }
     void onOutputChannels(ScompOutChannelsCb cb) { _cb_out = cb; }
+    void onStripConfig  (ScompStripConfigCb  cb) { _cb_cfg = cb; }
 
     // Returns true if a peer heartbeat arrived within SCOMP_DEADZONE_MS.
     bool peerAlive() const;
+
+    // Print local/remote UP|DOWN status to Serial. Safe to call any time.
+    void printHeartbeat();
 
 
     // RX diagnostics
@@ -122,15 +148,18 @@ public:
 
 private:
     SerialTransfer     _xfer;
-    uint8_t            _my_flag     = 0;
-    uint32_t           _peer_last_ms = 0;
-    uint32_t           _rx_frames   = 0;
-    uint32_t           _rx_errors   = 0;
+    uint8_t            _my_flag        = 0;
+    uint32_t           _peer_last_ms   = 0;
+    uint8_t            _peer_node_flag = 0;
+    uint32_t           _peer_uptime_ms = 0;
+    uint32_t           _rx_frames      = 0;
+    uint32_t           _rx_errors      = 0;
 
     ScompHeartbeatCb   _cb_hb  = nullptr;
     ScompLedTriggerCb  _cb_led = nullptr;
     ScompInChannelsCb  _cb_in  = nullptr;
     ScompOutChannelsCb _cb_out = nullptr;
+    ScompStripConfigCb _cb_cfg = nullptr;
 
     void _dispatch(uint8_t msg_type);
 };

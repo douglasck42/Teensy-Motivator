@@ -20,3 +20,4 @@
 #define HEARTBEAT_INTERVAL_MS 5000
 #endif
 
+void print_memory_info();
