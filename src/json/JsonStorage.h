@@ -24,6 +24,9 @@ public:
   // Delete file
   static bool remove(const char *path);
 
+  // Rename/move file
+  static bool rename(const char *from, const char *to);
+
 private:
   static bool _initialized;
 };

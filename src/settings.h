@@ -59,6 +59,8 @@ struct Settings {
         uint16_t sbus_max = 1810;   // The maximum SBUS value that corresponds to the maximum volume. This is used for mapping the SBUS input range to the volume range.
         bool dfp_debug = false; // Flag to indicate whether to print DFPlayer-related debug information to the serial console. This can be useful for verifying that audio controls are working as expected, but can be very verbose, so it is disabled by default.
 
+        void reset() { *this = Audio{}; }
+
         void to_json(JsonObject obj) const {
             obj["volume"]    = volume;
             obj["min"]       = min;
@@ -119,6 +121,8 @@ struct Settings {
         uint16_t toggle_3_us_min = 988;
         uint16_t toggle_3_us_mid = 1500;
         uint16_t toggle_3_us_max = 2012;
+
+        void reset() { *this = System{}; }
 
         void to_json(JsonObject obj) const {
             // num_ichannels / num_ochannels intentionally omitted (compile-time constants)
@@ -209,6 +213,8 @@ struct Settings {
         String description;
         iChannelFunction channelFunction = iChannelFunction::SERVO_DIRECT; // The name of the function that should be called to handle changes in this channel's value. This is used to map SBUS input to specific output functions.
 
+        void reset() { *this = iChannel{}; }
+
         // Runtime-only fields omitted: updated, sbus_value, us_value
         void to_json(JsonObject obj) const {
             obj["enabled"]         = enabled;
@@ -265,6 +271,8 @@ struct Settings {
         String description;
         oChannelFunction channelFunction = oChannelFunction::SERVO_DIRECT;; // The name of the function that should be called to handle changes in this channel's value. This is used to map SBUS input to specific output functions.
 
+        void reset() { *this = oChannel{}; }
+
         // Runtime-only fields omitted: updated, us_value
         void to_json(JsonObject obj) const {
             obj["enabled"]          = enabled;
@@ -319,6 +327,8 @@ struct Settings {
 
         boolean serial_print_button_mapping = false; // Flag to indicate whether to print the mapping of SBUS values to KyberPad buttons to the serial console. This can be useful for debugging and verifying that the button mappings are correct, but can be very verbose, so it is disabled by default.
 
+        void reset() { *this = Kyperpad{}; }
+
         // Runtime-only omitted: page
         // Compile-time constants omitted: pages, rows, columns, button_count
         void to_json(JsonObject obj) const {
@@ -340,20 +350,30 @@ struct Settings {
     } kyperpadbuttonvalues[BUTTON_COUNT];
 
     struct KyberpadButton {
-        String description; // A human-readable description of the button's function. This is used for debugging and can be used in the future for dynamic mapping of button functions.
-        uint16_t audio_file_start = 0; // The starting audio file number associated with this button. This is used to determine which audio file to play when the button is pressed, allowing for multiple buttons to be mapped to different audio files or sets of audio files.
-        uint16_t audio_file_end = 0; // The ending audio file number associated with this button. This is used in conjunction with audio_file_start to determine the range of audio files to play when the button is pressed, allowing for multiple buttons to be mapped to different audio files or sets of audio files.
+        String description;              // A human-readable description of the button's function. This is used for debugging and can be used in the future for dynamic mapping of button functions.
+        String location;                 // Location of the button on the KyberPad, in the format "Page X Row Y Column Z". This is used for debugging and can be used in the future for dynamic mapping of button functions based on their physical location.
+        uint16_t audio_file_start = 0;   // The starting audio file number associated with this button. This is used to determine which audio file to play when the button is pressed, allowing for multiple buttons to be mapped to different audio files or sets of audio files.
+        uint16_t audio_file_end = 0;     // The ending audio file number associated with this button. This is used in conjunction with audio_file_start to determine the range of audio files to play when the button is pressed, allowing for multiple buttons to be mapped to different audio files or sets of audio files.
         uint16_t audio_file_current = 0; // Runtime-only, The current audio file number to play for this button. This is used to keep track of which audio file in the specified range should be played next when the button is pressed, allowing for cycling through a set of audio files for each button.
-        bool audio_randomize = false; // Flag to indicate whether to randomize audio file selection for this button. If true, a random audio file from the specified range will be played each time the button is pressed. If false, audio files will be played in sequential order based on audio_file_current.
-        bool kyberpad_stop = false; // Flag to indicate if this channel should stop further processing of KyberPad button inputs when a change is detected. This can be used to prevent certain channels from triggering button actions, such as the page selector channel which can cause unintended button presses when changing pages due to overlapping SBUS value ranges.
+        bool audio_randomize = false;    // Flag to indicate whether to randomize audio file selection for this button. If true, a random audio file from the specified range will be played each time the button is pressed. If false, audio files will be played in sequential order based on audio_file_current.
+        bool kyberpad_stop = false;      // Flag to indicate if this channel should stop further processing of KyberPad button inputs when a change is detected. This can be used to prevent certain channels from triggering button actions, such as the page selector channel which can cause unintended button presses when changing pages due to overlapping SBUS value ranges.
+        bool led_scomp_link = true;      // Is this running on the Scomp-Link serial port? Or does it pass it to the relays via WiFi?
+        uint8_t led_bank = 0;            // Scomp-Link or Scomp-Relay LED Bank Number, 0-indexed
+        uint16_t led_sequence = 0;       // Scomp-Link LED Sequence Number. This is used to trigger specific LED patterns on the Scomp-Link when the button is pressed, allowing for visual feedback and indication of button presses and actions.
+
+        void reset() { *this = KyberpadButton{}; }
 
         // Runtime-only omitted: audio_file_current
         void to_json(JsonObject obj) const {
             obj["description"]      = description.c_str();
+            obj["location"]         = location.c_str();
             obj["audio_file_start"] = audio_file_start;
             obj["audio_file_end"]   = audio_file_end;
             obj["audio_randomize"]  = audio_randomize;
             obj["kyberpad_stop"]    = kyberpad_stop;
+            obj["led scomp link"]   = led_scomp_link;
+            obj["led bank"]         = led_bank;
+            obj["led sequence"]     = led_sequence;
         }
 
         void from_json(JsonObjectConst obj) {
@@ -363,6 +383,11 @@ struct Settings {
             kyberpad_stop    = obj["kyberpad_stop"]    | kyberpad_stop;
             if (obj["description"].is<const char*>())
                 description  = obj["description"].as<const char*>();
+            if (obj["location"].is<const char*>())
+                location     = obj["location"].as<const char*>();
+            led_scomp_link   = obj["led scomp link"]   | led_scomp_link;
+            led_bank         = obj["led bank"]         | led_bank;
+            led_sequence     = obj["led sequence"]     | led_sequence;
         }
     } kyberpadbuttons[PAGES][ROWS][COLUMNS];
 
@@ -375,6 +400,7 @@ void loadSettingsDefaults();
 void resetSettingsDefaults();
 bool settingsLoad(const char *path, Settings &cfg);
 bool settingsSave(const char *path, const Settings &cfg, bool pretty = true);
+void settingsBackup(const char *basePath, const Settings &cfg, uint8_t maxVersions = 3);
 
 uint16_t sbusGetMin(uint8_t channel);
 uint16_t sbusGetMax(uint8_t channel);
@@ -382,3 +408,4 @@ uint16_t usGetMin(ChannelType type, uint8_t channel);
 uint16_t usGetMax(ChannelType type, uint8_t channel);
 void printChannel(ChannelType type, uint8_t channel);
 void ioPrintChannel(uint8_t ochannel, uint8_t ichannel);
+void printChannelUs(ChannelType type);

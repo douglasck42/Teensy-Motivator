@@ -10,7 +10,7 @@
 #include "kyberpad/kyberpad.h"
 #include "maestro/maestro.h"
 #include "json/JsonStorage.h"
-#include "scomp/scomp_serial.h"
+#include "scomp/scomp_link.h"
 
 // ========================= OTHER MIST SETTINGS =========================
 #ifndef PRINT_ALL_INTERVAL_MS
@@ -22,105 +22,18 @@
 #endif
 
 // ========================= SCOMP SETTINGS =========================
-static unsigned long scomp_serial_peer_last_heartbeat = 0;
-static boolean scomp_peer_alive = false;
-
 static unsigned long millis_lastHeartbeat = 0;
 
 // Hand off the serial port here - Serial1 = pins 0/1 on Teensy 4.1
 SbusDriverType sbusHandler(&SBUS_SERIAL);
 Maestro maestro;
-ScompSerial scomp;
+ScompLink scomp;
 
 // Define all functons:
 void inputOutputMapping(uint8_t channel, unsigned long now);
 void ioVolume(uint8_t channel);
 
-
 // ========================= SCOMP =========================
-void onScompMessage(uint8_t msg_type, const uint8_t *payload, uint16_t len, void *) {
-    switch (msg_type) {
-        case SCOMP_MSG_HEARTBEAT: {
-            unsigned long now_hb = millis();
-            unsigned long gap = scomp_serial_peer_last_heartbeat ? (now_hb - scomp_serial_peer_last_heartbeat) : 0;
-            scomp_serial_peer_last_heartbeat = now_hb;
-            scomp_peer_alive = true;
-            if (len >= sizeof(ScompHeartbeat)) {
-                const auto *hb = reinterpret_cast<const ScompHeartbeat *>(payload);
-                Serial.printf("Heartbeat: Teensy UP %s", formatUptime(now_hb));
-                Serial.printf(" | Scomp UP %s", formatUptime(hb->uptime_ms));
-                Serial.printf(" | v%u flags=0x%02X gap=%lums\n", hb->version, hb->flags, gap);
-            } else {
-                Serial.printf("Heartbeat: Teensy UP %s | Scomp FAULT | short payload %u bytes\n", formatUptime(now_hb), len);
-            }
-            break;
-        }
-        case SCOMP_MSG_REQUEST_STATE: {
-            if (settings.system.debug) Serial.println("SCOMP: ESP32 requested state dump");
-            // full state will be sent on the next scompSendState() tick
-            break;
-        }
-        case SCOMP_MSG_SET_VOLUME: {
-            if (len < sizeof(ScompSetVolume)) break;
-            const auto *msg = reinterpret_cast<const ScompSetVolume *>(payload);
-            uint8_t vol = constrain(msg->volume, settings.audio.min, settings.audio.max);
-            dfpVolume(vol);
-            settings.audio.volume = vol;
-            if (settings.system.debug) Serial.printf("SCOMP: Set volume → %u\n", vol);
-            break;
-        }
-        case SCOMP_MSG_TRIGGER_AUDIO: {
-            if (len < sizeof(ScompTriggerAudio)) break;
-            const auto *msg = reinterpret_cast<const ScompTriggerAudio *>(payload);
-            dfpPlay(msg->file_number);
-            if (settings.system.debug) Serial.printf("SCOMP: Trigger audio → file %u\n", msg->file_number);
-            break;
-        }
-        case SCOMP_MSG_SET_SETTING: {
-            if (len < sizeof(ScompSetSetting)) break;
-            const auto *msg = reinterpret_cast<const ScompSetSetting *>(payload);
-            if (settings.system.debug) Serial.printf("SCOMP: Set setting key=0x%02X idx=%u val=%u\n",
-                                                      msg->key, msg->index, msg->value.u8);
-            switch (msg->key) {
-                case SCOMP_SETTING_AUDIO_MUTE:
-                    settings.audio.mute = (msg->value.u8 != 0);
-                    if (settings.audio.mute) dfpVolume(0);
-                    else dfpVolume(settings.audio.volume);
-                    break;
-                default: break;
-            }
-            break;
-        }
-        default:
-            Serial.printf("SCOMP: Unknown message type 0x%02X len=%u\n", msg_type, len);
-            break;
-    }
-}
-
-void scompSendState(unsigned long now) {
-    // Input channels
-    ScompInputChannels in_msg = {};
-    for (uint8_t i = 0; i < SCOMP_IN_CH; i++) {
-        in_msg.values[i] = settings.ichannel[i].sbus_value;
-        if (settings.ichannel[i].enabled) in_msg.enabled[i / 8] |= (1u << (i % 8));
-    }
-    scomp.sendInputChannels(in_msg);
-
-    // Output channels
-    ScompOutputChannels out_msg = {};
-    for (uint8_t i = 0; i < SCOMP_OUT_CH; i++) {
-        out_msg.values[i] = settings.ochannel[i].us_value;
-        if (settings.ochannel[i].enabled) out_msg.enabled[i / 8] |= (1u << (i % 8));
-    }
-    scomp.sendOutputChannels(out_msg);
-
-    // Audio state
-    ScompAudioState audio_msg = {};
-    audio_msg.volume = settings.audio.volume;
-    audio_msg.state  = dfpIsPlaying() ? SCOMP_AUDIO_PLAYING : SCOMP_AUDIO_STOPPED;
-    scomp.sendAudioState(audio_msg);
-}
-
 
 
 // ========================= CONFIG =========================
@@ -168,8 +81,7 @@ void setup() {
     Serial5.addMemoryForRead(Serial5_rx_buf,  sizeof(Serial5_rx_buf));
     Serial6.addMemoryForWrite(Serial6_tx_buf, sizeof(Serial6_tx_buf));
 
-    scomp.begin(Serial5);
-    scomp.onMessage(onScompMessage);
+    scomp.begin(Serial5, SCOMP_FLAG_NODE_LOCAL);
 
     // Enable watchdog (5 second timeout)
     #if WATCHDOG_ENABLED
@@ -218,12 +130,11 @@ void loadSettingsWrapper() {
             Serial.println("Settings loaded");
         } else {
             Serial.println("No config found, using defaults");
-            // Optionally write defaults out on first boot:
-            settingsSave("/config.json", settings);
         }
     }
 
-    settingsSave("/config_backup.json", settings); // Backup the loaded (or default) settings for debugging purposes
+    settingsSave("/config.json", settings);        // Write settings back out - this insures that a user looking at the JSON always sees the current settings
+    //settingsBackup("/config", settings); // Rotate versioned backups (.1=newest, .3=oldest)
     
 }
 Stream& getSerialPort(uint8_t port) {
@@ -396,41 +307,47 @@ void loop() {
     // Scomp update to read incoming messages and trigger callbacks - this should be called every loop tick to ensure timely processing of incoming Scomp messages from the ESP32
     scomp.update();
 
-    // Liveness (Scomp)
-    if (now - scomp_serial_peer_last_heartbeat >= (SCOMP_DEADZONE_MS)) {
-        scomp_peer_alive = false;
-    }
-
-    // Heartbeat (USB serial)
-    if (now - millis_lastHeartbeat >= HEARTBEAT_INTERVAL_MS) { // add a little extra time to ensure this doesn't get too close to the Scomp heartbeat, which is on the same timer
+    // Heartbeat (USB serial) — reports liveness of both sides
+    if (now - millis_lastHeartbeat >= HEARTBEAT_INTERVAL_MS) {
         millis_lastHeartbeat = now;
-        if (!scomp_peer_alive) {
+        if (!scomp.peerAlive()) {
+            // More serial.prints to get around ESP32 weirdness and keep this code portable
+            Serial.printf("Heartbeat: Local Node 0x%02X UP ", SCOMP_FLAG_NODE_LOCAL);
+            Serial.print(formatUptime(now));
+            Serial.printf(" | Remote Node 0x%02X DOWN", SCOMP_FLAG_NODE_REMOTE);
             #if DEBUG_SCOMP_RX
-            Serial.printf("Heartbeat: Teensy UP %s | Scomp DOWN | rx bytes=%lu frames=%lu crc_err=%lu sync_drops=%lu\n",
-                          formatUptime(now), scomp.rxBytes(), scomp.rxFrames(), scomp.rxCrcErrors(), scomp.rxSyncDrops());
-            #else
-            Serial.printf("Heartbeat: Teensy UP %s | Scomp DOWN\n", formatUptime(now));
+            Serial.printf(" | frames=%lu errors=%lu", scomp.rxFrames(), scomp.rxErrors());
             #endif
+            Serial.print("\n");
         }
-        millis_lastHeartbeat = now;
     }
 
-    // Heartbeat (Scomp)
+    // Heartbeat (Scomp) — announce ourselves to the peer
     if (now - millis_lastScompHeartbeat >= HEARTBEAT_INTERVAL_MS) {
-        ScompHeartbeat hb = {};
-        hb.version   = SCOMP_PROTOCOL_VERSION;
-        hb.uptime_ms = now;
-        hb.flags     = (sbusHandler.failsafe()  ? SCOMP_FLAG_SBUS_FAILSAFE   : 0)
-                     | (sbusHandler.lostFrame() ? SCOMP_FLAG_SBUS_LOST_FRAME : 0);
-        scomp.sendHeartbeat(hb);
+        scomp.sendHeartbeat(now);
         millis_lastScompHeartbeat = now;
     }
 
-    // Periodic state push to ESP32
+    // Periodic channel state push to SCOMP REMOTE — alternated each tick so the ESP32
+    // never receives two large packets back-to-back (avoids RX buffer overflow / CRC errors).
     if (now - millis_lastScompSend >= SCOMP_SEND_INTERVAL_MS) {
         millis_lastScompSend = now;
-        scompSendState(now);
+        static bool send_input = false;
+        static bool send_output = false;
+
+        if (send_input) {
+            ScompInputChannels in_msg = {};
+            for (uint8_t i = 0; i < SCOMP_IN_CH; i++) in_msg.us[i] = settings.ichannel[i].us_value;
+            scomp.sendInputChannels(in_msg);
+        } else {
+            ScompOutputChannels out_msg = {};
+            for (uint8_t i = 0; i < SCOMP_OUT_CH; i++) out_msg.us[i] = settings.ochannel[i].us_value;
+            scomp.sendOutputChannels(out_msg);
+        }
+        send_input = !send_input;
     }
+
+    // verbose chatty stuff
     if (now - millis_lastPrintAll >= PRINT_ALL_INTERVAL_MS) {
         printAllChannels();
         millis_lastPrintAll = now;

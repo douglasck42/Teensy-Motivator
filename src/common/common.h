@@ -20,16 +20,3 @@
 #define HEARTBEAT_INTERVAL_MS 5000
 #endif
 
-// ========================= SCOMP SETTINGS =========================
-#ifndef DEBUG_SCOMP_RX
-#define DEBUG_SCOMP_RX 0
-#endif
-#ifndef SCOMP_BAUD_RATE
-#define SCOMP_BAUD_RATE 115200
-#endif
-#define SCOMP_DEADZONE_MS (HEARTBEAT_INTERVAL_MS * 3)  // if we haven't heard from the Teensy in this long, consider it dead/silent
-#ifndef SCOMP_SEND_INTERVAL_MS
-#define SCOMP_SEND_INTERVAL_MS 50   // 20 Hz channel updates to ESP32
-#endif
-
-char* formatUptime(unsigned long ms);

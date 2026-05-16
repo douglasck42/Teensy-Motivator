@@ -1,4 +1,3 @@
-#include "JsonStorage.h"
 // Copyright (c) 2026 Douglas Kempthorne (douglas@kempthorne.com)
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -8,6 +7,8 @@
 // doc["volume"] = 80;
 // 
 // JsonStorage::write("/config.json", doc);
+
+#include "JsonStorage.h"
 
 bool JsonStorage::_initialized = false;
 
@@ -29,6 +30,12 @@ bool JsonStorage::remove(const char *path) {
   return SD.remove(path);
 }
 
+bool JsonStorage::rename(const char *from, const char *to) {
+  if (!_initialized) return false;
+  if (SD.exists(to)) SD.remove(to);
+  return SD.rename(from, to);
+}
+
 bool JsonStorage::read(const char *path, JsonDocument &doc) {
   if (!_initialized) return false;
 
@@ -44,11 +51,10 @@ bool JsonStorage::read(const char *path, JsonDocument &doc) {
 bool JsonStorage::write(const char *path, const JsonDocument &doc, bool pretty) {
   if (!_initialized) return false;
 
+  if (SD.exists(path)) SD.remove(path);
+
   File file = SD.open(path, FILE_WRITE);
   if (!file) return false;
-
-  file.seek(0);
-  file.truncate(0); // overwrite cleanly
 
   size_t written = 0;
 
