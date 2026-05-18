@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Douglas Kempthorne (douglas@kempthorne.com)
 // SPDX-License-Identifier: GPL-3.0-or-later
+#define BUILD_VERSION "0.3.0"
 
-#define BUILD_VERSION "0.2.0"
 #include <Arduino.h>
 #include "common/settings.h"
 #include "common/common.h"
