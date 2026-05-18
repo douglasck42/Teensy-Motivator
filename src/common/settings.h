@@ -351,7 +351,6 @@ struct Settings {
 
     struct KyberpadButton {
         String description;              // A human-readable description of the button's function. This is used for debugging and can be used in the future for dynamic mapping of button functions.
-        String location;                 // Location of the button on the KyberPad, in the format "Page X Row Y Column Z". This is used for debugging and can be used in the future for dynamic mapping of button functions based on their physical location.
         uint16_t audio_file_start = 0;   // The starting audio file number associated with this button. This is used to determine which audio file to play when the button is pressed, allowing for multiple buttons to be mapped to different audio files or sets of audio files.
         uint16_t audio_file_end = 0;     // The ending audio file number associated with this button. This is used in conjunction with audio_file_start to determine the range of audio files to play when the button is pressed, allowing for multiple buttons to be mapped to different audio files or sets of audio files.
         uint16_t audio_file_current = 0; // Runtime-only, The current audio file number to play for this button. This is used to keep track of which audio file in the specified range should be played next when the button is pressed, allowing for cycling through a set of audio files for each button.
@@ -366,7 +365,6 @@ struct Settings {
         // Runtime-only omitted: audio_file_current
         void to_json(JsonObject obj) const {
             obj["description"]      = description.c_str();
-            obj["location"]         = location.c_str();
             obj["audio_file_start"] = audio_file_start;
             obj["audio_file_end"]   = audio_file_end;
             obj["audio_randomize"]  = audio_randomize;
@@ -383,8 +381,6 @@ struct Settings {
             kyberpad_stop    = obj["kyberpad_stop"]    | kyberpad_stop;
             if (obj["description"].is<const char*>())
                 description  = obj["description"].as<const char*>();
-            if (obj["location"].is<const char*>())
-                location     = obj["location"].as<const char*>();
             led_scomp_link   = obj["led scomp link"]   | led_scomp_link;
             led_bank         = obj["led bank"]         | led_bank;
             led_sequence     = obj["led sequence"]     | led_sequence;
