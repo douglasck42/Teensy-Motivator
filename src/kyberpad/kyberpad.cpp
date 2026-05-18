@@ -18,7 +18,7 @@ void ioKyberpadButtonExecute(uint8_t page, uint8_t row, uint8_t column) {
         return; // Exit the function if there is no audio file mapped to this button
     }
     if (button.audio_randomize) {
-        if (button.audio_file_end < button.audio_file_start) {
+        if (button.audio_file_end > button.audio_file_start) {
             button.audio_file_current = random(button.audio_file_start, button.audio_file_end);
             Serial.printf("KyberPad: Randomizing audio file for Button on Page %d Row %d Column %d - audio_file_start: %d, audio_file_end: %d, selected audio_file_current: %d\n", page + 1, row + 1, column + 1, button.audio_file_start, button.audio_file_end, button.audio_file_current);
         } else {

@@ -325,7 +325,7 @@ void loop() {
     if (now - millis_lastScompSend >= SCOMP_SEND_INTERVAL_MS) {
         millis_lastScompSend = now;
         static bool send_input = false;
-        static bool send_output = false;
+        //static bool send_output = false;
 
         if (send_input) {
             ScompInputChannels in_msg = {};

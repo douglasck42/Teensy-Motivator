@@ -99,15 +99,6 @@ void loadSettingsDefaults() {
     //settings.kyberpadbuttons[zIdx(3)][zIdx(3)][zIdx(5)].audio_file_end = 0;
     //settings.kyberpadbuttons[zIdx(3)][zIdx(3)][zIdx(5)].kyberpad_stop = true;
 
-    for (uint8_t page = 0; page < settings.kyberpad.pages; page++) {
-        for (uint8_t row = 0; row < settings.kyberpad.rows; row++) {
-            for (uint8_t col = 0; col < settings.kyberpad.columns; col++) {
-                char buffer[64];
-                snprintf(buffer, sizeof(buffer), "Page %d Row %d Column %d", page + 1, row + 1, col + 1);
-                settings.kyberpadbuttons[page][row][col].location = buffer;
-            }
-        }
-    }
     printSettings();
 
 }
@@ -118,9 +109,8 @@ void printSettings() {
         for (int row = 0; row < settings.kyberpad.rows; row++) {
             for (uint8_t col = 0; col < settings.kyberpad.columns; col++) {
                 // int button_index = (page - 1) * settings.kyberpad.rows * settings.kyberpad.columns + (row - 1) * settings.kyberpad.columns + col;
-                if (settings.kyberpad.serial_print_button_mapping) {
-                    Serial.printf("  KyberPad Button Page %d Row %d Column %d: %s\n", page + 1, row + 1, col + 1, settings.kyberpadbuttons[page][row][col].description.c_str());
-                }
+                    Serial.printf("  KyberPad Button Page %d Row %d Column %d:", page + 1, row + 1, col + 1);
+                    Serial.printf(" %d - %d: %s\n",  settings.kyberpadbuttons[page][row][col].audio_file_start,  settings.kyberpadbuttons[page][row][col].audio_file_end, settings.kyberpadbuttons[page][row][col].description.c_str());
                 //settings.kyberpadbuttons[page][row][col].audio_file_current = settings.kyberpadbuttons[page][row][col].audio_file_start; // Initialize current audio file to start of range for each button
             }
         }
@@ -142,15 +132,15 @@ void printSettings() {
             sbus_min = sbusGetMin(current_channel);
             sbus_max = sbusGetMax(current_channel);
             description = ch.description.c_str();
+            Serial.printf("  %-3d %-24s  %-6d  %-6d  %-8d  %-8d\n",
+                current_channel + 1,
+                description.c_str(),
+                us_min,
+                us_max,
+                sbus_min,
+                sbus_max
+                );
         }
-        Serial.printf("  %-3d %-24s  %-6d  %-6d  %-8d  %-8d\n",
-            current_channel + 1,
-            description.c_str(),
-            us_min,
-            us_max,
-            sbus_min,
-            sbus_max
-            );
     }   
 
 
@@ -190,13 +180,21 @@ bool settingsSave(const char *path, const Settings &cfg, bool pretty) {
     // Input channels
     JsonArray ichs = doc["ichannels"].to<JsonArray>();
     for (uint8_t i = 0; i < NUM_INPUT_CHANNELS; i++) {
-        cfg.ichannel[i].to_json(ichs.add<JsonObject>());
+        JsonObject obj = ichs.add<JsonObject>();
+        char ich_label[40];
+        snprintf(ich_label, sizeof(ich_label), "Input Channel %d, R/C Channel %d", i, i + 1);
+        obj["_channel"] = ich_label;
+        cfg.ichannel[i].to_json(obj);
     }
 
     // Output channels
     JsonArray ochs = doc["ochannels"].to<JsonArray>();
     for (uint8_t i = 0; i < NUM_OUTPUT_CHANNELS; i++) {
-        cfg.ochannel[i].to_json(ochs.add<JsonObject>());
+        JsonObject obj = ochs.add<JsonObject>();
+        char och_label[24];
+        snprintf(och_label, sizeof(och_label), "Output Channel %d", i);
+        obj["_channel"] = och_label;
+        cfg.ochannel[i].to_json(obj);
     }
 
     // Kyberpad config
@@ -215,7 +213,11 @@ bool settingsSave(const char *path, const Settings &cfg, bool pretty) {
         for (uint8_t r = 0; r < ROWS; r++) {
             JsonArray cols = rows.add<JsonArray>();
             for (uint8_t c = 0; c < COLUMNS; c++) {
-                cfg.kyberpadbuttons[p][r][c].to_json(cols.add<JsonObject>());
+                JsonObject obj = cols.add<JsonObject>();
+                char btn_label[32];
+                snprintf(btn_label, sizeof(btn_label), "Page %d Row %d Column %d", p + 1, r + 1, c + 1);
+                obj["_button"] = btn_label;
+                cfg.kyberpadbuttons[p][r][c].to_json(obj);
             }
         }
     }

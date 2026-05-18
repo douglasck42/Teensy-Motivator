@@ -53,9 +53,9 @@ void dfpSetup() {
   //  myDFPlayer.outputDevice(DFPLAYER_DEVICE_SLEEP);
   //  myDFPlayer.outputDevice(DFPLAYER_DEVICE_FLASH);
 
-  //  myDFPlayer.enableDAC();  //Enable On-chip DAC
+  myDFPlayer.enableDAC();  //Enable On-chip DAC
   //  myDFPlayer.disableDAC();  //Disable On-chip DAC
-  //  myDFPlayer.outputSetting(true, 15); //output setting, enable the output and set the gain to 15
+  myDFPlayer.outputSetting(true, 15); //output setting, enable the output and set the gain to 15
     //----Read imformation----
   Serial.println("DFPlayer: Status");
   Serial.println("  MP3 State: " + String(myDFPlayer.readState())); //read mp3 state
@@ -154,4 +154,5 @@ void dfpVolume(uint8_t volume) {
     Serial.printf("DFPlayer: Setting volume to %d\n", volume);
   }
   myDFPlayer.volume(volume);
+  myDFPlayer.outputSetting(true, volume);
 }
