@@ -8,7 +8,7 @@
 #define NUM_LEDS_STRIP1 2
 #endif
 
-#define FILL_TEST_STRIP 1
+#define FILL_TEST_STRIP 0
 
 //static Adafruit_NeoPixel strip1(NUM_LEDS_STRIP1, LED_BANK1_PIN, NEO_GRBW + NEO_KHZ800);
 static Adafruit_NeoPixel strip1(NUM_LEDS_STRIP1, LED_BANK1_PIN, NEO_GRB + NEO_KHZ800);
