@@ -12,6 +12,10 @@
 #include "json/JsonStorage.h"
 #include "scomp/scomp_link.h"
 
+#if LED_ENABLED == 1
+#include "led/teensy_led.h"
+#endif
+
 // ========================= OTHER MIST SETTINGS =========================
 #ifndef PRINT_ALL_INTERVAL_MS
 #define PRINT_ALL_INTERVAL_MS 30000
@@ -112,6 +116,10 @@ void setup() {
     dfpVolume(settings.audio.initial);
     Serial.printf("DFPlayer: Volume set to %d of %d\n", settings.audio.initial, settings.audio.max);
     settings.audio.volume = settings.audio.initial; // Update the settings with the new volume level
+
+    #if LED_ENABLED == 1
+    teensy_led_setup();
+    #endif
 
     Serial.println("Teensy Motivator now motivating! (setup complete)");
 
@@ -371,5 +379,9 @@ void loop() {
         sendOuputs(now);            // write the serial output queues
 
     }
+
+    #if LED_ENABLED == 1
+    teensy_led_loop();
+    #endif
 
 }
